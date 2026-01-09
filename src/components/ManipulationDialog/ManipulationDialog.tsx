@@ -455,7 +455,8 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
       // Use the preserved iterationImage if the current event doesn't have one
       setProgress({
         ...event,
-        iterationImage: event.iterationImage || lastIterationImageRef.current || undefined,
+        iterationImage:
+          event.iterationImage || lastIterationImageRef.current || undefined,
       });
 
       // Log to aiLogService for sidebar display
@@ -518,7 +519,7 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
     onClose();
 
     try {
-      const result = await executeAgenticEdit({
+      await executeAgenticEdit({
         canvasBlob,
         referencePoints: transformedReferencePoints,
         command: state.command.trim(),
@@ -528,8 +529,8 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
       // End logging operation
       aiLogService.endOperation("complete", "Edit complete!");
 
-      // Pass result back to parent
-      onResult(result.imageData);
+      // Don't call onResult here - the review UI will handle accept/reject
+      // The result images are collected via onProgress → addIterationImage
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "An unknown error occurred";
@@ -553,7 +554,6 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
     referencePoints,
     exportBounds,
     handleProgress,
-    onResult,
     onClose,
     setIsProcessing,
   ]);

@@ -60,14 +60,14 @@ export const ReferencePointsOverlay: React.FC<ReferencePointsOverlayProps> = ({
     <div
       className="reference-points-overlay"
       style={{
-        position: "absolute",
+        position: "fixed",
         top: 0,
         left: 0,
         width: "100%",
         height: "100%",
         pointerEvents: "none",
         overflow: "hidden",
-        zIndex: 100,
+        zIndex: 15, // Above ThinkingOverlay (z-index: 10), below sidebar (120)
       }}
       aria-label="Reference points overlay"
     >

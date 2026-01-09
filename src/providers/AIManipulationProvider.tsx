@@ -113,8 +113,12 @@ export interface AIManipulationContextValue {
   // AI Edit State
   /** Whether an AI edit is currently processing */
   isProcessing: boolean;
+  /** Whether in review mode (AI finished, awaiting accept/reject) */
+  isReviewing: boolean;
   /** Current progress event from SSE stream */
   progress: AIProgressEvent | null;
+  /** All iteration images collected during processing */
+  iterationImages: string[];
   /** Error from the last failed operation */
   error: Error | null;
 
@@ -132,6 +136,14 @@ export interface AIManipulationContextValue {
   setIsProcessing: (processing: boolean) => void;
   /** Manually set progress event (for components that manage their own edit execution) */
   setProgress: (event: AIProgressEvent | null) => void;
+  /** Add an iteration image to the collection */
+  addIterationImage: (image: string) => void;
+  /** Enter review mode (AI finished, show accept/reject UI) */
+  enterReviewMode: () => void;
+  /** Accept the AI result at the given index */
+  acceptResult: (index: number) => void;
+  /** Reject the AI result and cancel */
+  rejectResult: () => void;
 }
 
 // =============================================================================
@@ -219,6 +231,8 @@ export function AIManipulationProvider({
   const [manualProgress, setManualProgress] = useState<AIProgressEvent | null>(
     null,
   );
+  const [isReviewing, setIsReviewing] = useState(false);
+  const [iterationImages, setIterationImages] = useState<string[]>([]);
 
   // Combined state: either from hook or manual override
   const isProcessing = hookIsProcessing || manualIsProcessing;
@@ -231,6 +245,28 @@ export function AIManipulationProvider({
       // Clear progress when stopping processing
       setManualProgress(null);
     }
+  }, []);
+
+  // Add iteration image to collection
+  const addIterationImage = useCallback((image: string) => {
+    setIterationImages((prev) => [...prev, image]);
+  }, []);
+
+  // Enter review mode
+  const enterReviewMode = useCallback(() => {
+    setManualIsProcessing(false);
+    setIsReviewing(true);
+  }, []);
+
+  // Accept result at given index
+  const acceptResult = useCallback((_index: number) => {
+    setIsReviewing(false);
+  }, []);
+
+  // Reject result
+  const rejectResult = useCallback(() => {
+    setIsReviewing(false);
+    setIterationImages([]);
   }, []);
 
   const setProgress = useCallback((event: AIProgressEvent | null) => {
@@ -310,14 +346,24 @@ export function AIManipulationProvider({
 
     // AI Edit state
     isProcessing,
+    isReviewing,
     progress,
+    iterationImages,
     error,
 
     // AI Edit actions
     executeEdit,
-    resetEditState: resetAgenticEdit,
+    resetEditState: () => {
+      resetAgenticEdit();
+      setIterationImages([]);
+      setIsReviewing(false);
+    },
     setIsProcessing,
     setProgress,
+    addIterationImage,
+    enterReviewMode,
+    acceptResult,
+    rejectResult,
   };
 
   return (

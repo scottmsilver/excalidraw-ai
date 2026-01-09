@@ -444,9 +444,15 @@ const AIManipulationUI: React.FC<{
     exitAIMode,
     isAIModeActive,
     isProcessing,
+    isReviewing,
     progress,
+    iterationImages,
     addPoint,
     exportBounds,
+    addIterationImage,
+    enterReviewMode,
+    acceptResult,
+    rejectResult,
   } = useAIManipulation();
 
   // Get app state for overlay positioning
@@ -454,6 +460,43 @@ const AIManipulationUI: React.FC<{
   const zoom = appState?.zoom?.value ?? 1;
   const scrollX = appState?.scrollX ?? 0;
   const scrollY = appState?.scrollY ?? 0;
+
+  // Collect iteration images as they come in from SSE progress
+  const lastIterationImageRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (
+      progress?.iterationImage &&
+      progress.iterationImage !== lastIterationImageRef.current
+    ) {
+      lastIterationImageRef.current = progress.iterationImage;
+      addIterationImage(progress.iterationImage);
+    }
+  }, [progress?.iterationImage, addIterationImage]);
+
+  // Enter review mode when processing completes and we have iteration images
+  const wasProcessingRef = React.useRef(false);
+  React.useEffect(() => {
+    if (
+      wasProcessingRef.current &&
+      !isProcessing &&
+      iterationImages.length > 0 &&
+      !isReviewing
+    ) {
+      enterReviewMode();
+    }
+    wasProcessingRef.current = isProcessing;
+  }, [isProcessing, iterationImages.length, isReviewing, enterReviewMode]);
+
+  // Determine ThinkingOverlay status
+  const overlayStatus = React.useMemo(() => {
+    if (isReviewing) {
+      return "reviewing" as const;
+    }
+    if (isProcessing) {
+      return "thinking" as const;
+    }
+    return "idle" as const;
+  }, [isProcessing, isReviewing]);
 
   // Convert canvasImage (data URL) to Blob for ManipulationDialog
   const canvasBlob = React.useMemo(
@@ -552,6 +595,26 @@ const AIManipulationUI: React.FC<{
     },
     [excalidrawAPI, clearReferencePoints, exitAIMode, closeDialog],
   );
+
+  // Handle accept - apply the selected iteration image
+  const handleAccept = React.useCallback(
+    (selectedIndex: number) => {
+      const selectedImage = iterationImages[selectedIndex];
+      if (selectedImage) {
+        handleResult(selectedImage);
+      }
+      acceptResult(selectedIndex);
+    },
+    [iterationImages, handleResult, acceptResult],
+  );
+
+  // Handle reject - cancel and cleanup
+  const handleReject = React.useCallback(() => {
+    rejectResult();
+    clearReferencePoints();
+    exitAIMode();
+    closeDialog();
+  }, [rejectResult, clearReferencePoints, exitAIMode, closeDialog]);
 
   // Shift+Click handler for placing markers + crosshair cursor
   useEffect(() => {
@@ -669,15 +732,19 @@ const AIManipulationUI: React.FC<{
         exportBounds={exportBounds ?? undefined}
       />
 
-      {/* Thinking Overlay - sparks effect and interim proposals when AI is processing */}
+      {/* Thinking Overlay - sparks effect, interim proposals, and accept/reject UI */}
       <ThinkingOverlay
-        status={isProcessing ? "thinking" : "idle"}
+        status={overlayStatus}
         showBorder={false}
         image={progress?.iterationImage}
+        iterationImages={iterationImages}
+        originalImage={canvasImage}
         imageWidth={exportBounds?.imageWidth}
         imageHeight={exportBounds?.imageHeight}
         canvasBounds={exportBounds}
         viewport={zoom !== undefined ? { scrollX, scrollY, zoom } : null}
+        onAccept={handleAccept}
+        onReject={handleReject}
       />
 
       {/* AI Mode Hint - shows in same style as HintViewer */}
