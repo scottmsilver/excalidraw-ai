@@ -5,7 +5,10 @@ import {
   CaptureUpdateAction,
   reconcileElements,
   useEditorInterface,
+  exportToBlob,
+  MIME_TYPES,
 } from "@excalidraw/excalidraw";
+import { useTunnels } from "@excalidraw/excalidraw/context/tunnels";
 import { trackEvent } from "@excalidraw/excalidraw/analytics";
 import { getDefaultAppState } from "@excalidraw/excalidraw/appState";
 import {
@@ -30,9 +33,10 @@ import {
   resolvablePromise,
   isRunningInIframe,
   isDevEnv,
+  randomId,
 } from "@excalidraw/common";
 import polyfill from "@excalidraw/excalidraw/polyfill";
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { loadFromBlob } from "@excalidraw/excalidraw/data/blob";
 import { useCallbackRefState } from "@excalidraw/excalidraw/hooks/useCallbackRefState";
 import { t } from "@excalidraw/excalidraw/i18n";
@@ -46,8 +50,14 @@ import {
   exportToPlus,
   share,
   youtubeIcon,
+  MagicIcon,
 } from "@excalidraw/excalidraw/components/icons";
-import { isElementLink } from "@excalidraw/element";
+import {
+  isElementLink,
+  newImageElement,
+  syncInvalidIndices,
+  getCommonBounds,
+} from "@excalidraw/element";
 import {
   bumpElementVersions,
   restoreAppState,
@@ -74,9 +84,21 @@ import type {
   BinaryFiles,
   ExcalidrawInitialDataState,
   UIAppState,
+  DataURL,
 } from "@excalidraw/excalidraw/types";
 import type { ResolutionType } from "@excalidraw/common/utility-types";
 import type { ResolvablePromise } from "@excalidraw/common/utils";
+
+import {
+  AIManipulationProvider,
+  useAIManipulation,
+} from "../src/providers/AIManipulationProvider";
+
+import { ReferencePointsOverlay } from "../src/components/ReferencePoints";
+
+import { ManipulationDialog } from "../src/components/ManipulationDialog";
+
+import { ThinkingOverlay } from "./components/ThinkingOverlay";
 
 import CustomStats from "./CustomStats";
 import {
@@ -139,6 +161,11 @@ import DebugCanvas, {
 } from "./components/DebugCanvas";
 import { AIComponents } from "./components/AI";
 import { ExcalidrawPlusIframeExport } from "./ExcalidrawPlusIframeExport";
+import {
+  CoordinateHighlightProvider,
+  useCoordinateHighlight,
+} from "./ai/CoordinateHighlightContext";
+import { CoordinateHighlightOverlay } from "./ai/CoordinateHighlightOverlay";
 
 import "./index.scss";
 
@@ -366,6 +393,546 @@ const initializeScene = async (opts: {
       : { scene, isExternalScene: false };
   }
   return { scene: null, isExternalScene: false };
+};
+
+// =============================================================================
+// AI Manipulation UI Components
+// =============================================================================
+
+/**
+ * Convert data URL to Blob
+ */
+function dataURLToBlob(dataURL: string): Blob | null {
+  if (!dataURL) {
+    return null;
+  }
+  try {
+    const arr = dataURL.split(",");
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    if (!mimeMatch) {
+      return null;
+    }
+    const mime = mimeMatch[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Container component for AI manipulation features.
+ * Must be used within AIManipulationProvider.
+ *
+ * Handles Shift+Click for placing markers when AI mode is active.
+ */
+const AIManipulationUI: React.FC<{
+  excalidrawAPI: ExcalidrawImperativeAPI | null;
+}> = ({ excalidrawAPI }) => {
+  const {
+    referencePoints,
+    removeReferencePoint,
+    clearReferencePoints,
+    isDialogOpen,
+    closeDialog,
+    canvasImage,
+    exitAIMode,
+    isAIModeActive,
+    isProcessing,
+    addPoint,
+    exportBounds,
+  } = useAIManipulation();
+
+  // Get app state for overlay positioning
+  const appState = excalidrawAPI?.getAppState();
+  const zoom = appState?.zoom?.value ?? 1;
+  const scrollX = appState?.scrollX ?? 0;
+  const scrollY = appState?.scrollY ?? 0;
+
+  // Convert canvasImage (data URL) to Blob for ManipulationDialog
+  const canvasBlob = React.useMemo(
+    () => dataURLToBlob(canvasImage),
+    [canvasImage],
+  );
+
+  // Handle result from AI manipulation
+  const handleResult = useCallback(
+    async (imageData: string) => {
+      if (!excalidrawAPI) {
+        console.error("No excalidraw API available");
+        clearReferencePoints();
+        exitAIMode();
+        closeDialog();
+        return;
+      }
+
+      try {
+        // Ensure imageData is a data URL
+        const dataURL = (
+          imageData.startsWith("data:")
+            ? imageData
+            : `data:image/png;base64,${imageData}`
+        ) as DataURL;
+
+        // Generate unique file ID (cast to FileId branded type)
+        const fileId = `ai-result-${Date.now()}-${randomId()}` as FileId;
+
+        // Add image file to excalidraw
+        excalidrawAPI.addFiles([
+          {
+            id: fileId,
+            dataURL,
+            mimeType: "image/png",
+            created: Date.now(),
+          },
+        ]);
+
+        // Calculate bounding box of all existing elements to match export size
+        const currentElements = excalidrawAPI.getSceneElements();
+        const nonDeletedElements = currentElements.filter(
+          (el) => !el.isDeleted,
+        );
+
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+
+        for (const el of nonDeletedElements) {
+          minX = Math.min(minX, el.x);
+          minY = Math.min(minY, el.y);
+          maxX = Math.max(maxX, el.x + (el.width || 0));
+          maxY = Math.max(maxY, el.y + (el.height || 0));
+        }
+
+        // Add padding matching exportToBlob default (10px)
+        const EXPORT_PADDING = 10;
+        minX -= EXPORT_PADDING;
+        minY -= EXPORT_PADDING;
+        maxX += EXPORT_PADDING;
+        maxY += EXPORT_PADDING;
+
+        // Calculate dimensions
+        const width = maxX - minX;
+        const height = maxY - minY;
+
+        // Create image element at the same position/size as the export
+        const imageElement = newImageElement({
+          type: "image",
+          x: minX,
+          y: minY,
+          width: width > 0 ? width : 400,
+          height: height > 0 ? height : 300,
+          fileId,
+          status: "saved",
+        });
+
+        // Add to scene - need to sync fractional indices for proper ordering
+        const newElements = [...currentElements, imageElement];
+
+        // Fix fractional indices (excalidraw requires proper ordering indices)
+        const syncedElements = syncInvalidIndices(newElements);
+
+        excalidrawAPI.updateScene({
+          elements: syncedElements,
+        });
+      } catch (error) {
+        console.error("Failed to add AI result to canvas:", error);
+      }
+
+      clearReferencePoints();
+      exitAIMode();
+      closeDialog();
+    },
+    [excalidrawAPI, clearReferencePoints, exitAIMode, closeDialog],
+  );
+
+  // Shift+Click handler for placing markers + crosshair cursor
+  useEffect(() => {
+    if (!isAIModeActive) {
+      return;
+    }
+
+    // Inject CSS for custom crosshair cursor (thinner than default)
+    // SVG crosshair: 32x32 with center at 16,16
+    const styleId = "ai-mode-crosshair-style";
+    let styleEl = document.getElementById(styleId) as HTMLStyleElement | null;
+    if (!styleEl) {
+      styleEl = document.createElement("style");
+      styleEl.id = styleId;
+      // Create a thin crosshair cursor using SVG data URL
+      const crosshairSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><line x1="16" y1="0" x2="16" y2="32" stroke="black" stroke-width="1"/><line x1="0" y1="16" x2="32" y2="16" stroke="black" stroke-width="1"/><circle cx="16" cy="16" r="2" fill="none" stroke="black" stroke-width="1"/></svg>`;
+      const cursorUrl = `url('data:image/svg+xml,${encodeURIComponent(
+        crosshairSvg,
+      )}') 16 16, crosshair`;
+      styleEl.textContent = `
+        .excalidraw.ai-crosshair-mode,
+        .excalidraw.ai-crosshair-mode * {
+          cursor: ${cursorUrl} !important;
+        }
+      `;
+      document.head.appendChild(styleEl);
+    }
+
+    const canvasContainer = document.querySelector(
+      ".excalidraw",
+    ) as HTMLElement | null;
+
+    // Set crosshair cursor when Shift is pressed
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Shift" && canvasContainer) {
+        canvasContainer.classList.add("ai-crosshair-mode");
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Shift" && canvasContainer) {
+        canvasContainer.classList.remove("ai-crosshair-mode");
+      }
+    };
+
+    // Also handle blur (window loses focus while Shift is held)
+    const handleBlur = () => {
+      if (canvasContainer) {
+        canvasContainer.classList.remove("ai-crosshair-mode");
+      }
+    };
+
+    const handleClick = (e: MouseEvent) => {
+      if (!e.shiftKey) {
+        return;
+      }
+
+      if (!canvasContainer) {
+        return;
+      }
+
+      const currentAppState = excalidrawAPI?.getAppState();
+      if (!currentAppState) {
+        return;
+      }
+
+      // Convert screen coordinates to canvas coordinates
+      // Using the correct formula: canvasX = screenX / zoom - scrollX
+      const rect = canvasContainer.getBoundingClientRect();
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
+      const canvasX =
+        screenX / currentAppState.zoom.value - currentAppState.scrollX;
+      const canvasY =
+        screenY / currentAppState.zoom.value - currentAppState.scrollY;
+
+      addPoint(canvasX, canvasY);
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("keyup", handleKeyUp);
+    document.addEventListener("click", handleClick);
+    window.addEventListener("blur", handleBlur);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("keyup", handleKeyUp);
+      document.removeEventListener("click", handleClick);
+      window.removeEventListener("blur", handleBlur);
+      // Remove crosshair class on cleanup
+      if (canvasContainer) {
+        canvasContainer.classList.remove("ai-crosshair-mode");
+      }
+    };
+  }, [isAIModeActive, excalidrawAPI, addPoint]);
+
+  return (
+    <>
+      {/* Reference Points Overlay */}
+      <ReferencePointsOverlay
+        points={referencePoints}
+        scale={zoom}
+        scrollX={scrollX}
+        scrollY={scrollY}
+        onPointRemove={(point) => removeReferencePoint(point.id)}
+      />
+
+      {/* Manipulation Dialog */}
+      <ManipulationDialog
+        isOpen={isDialogOpen}
+        onClose={closeDialog}
+        referencePoints={referencePoints}
+        canvasBlob={canvasBlob}
+        onResult={handleResult}
+        exportBounds={exportBounds ?? undefined}
+      />
+
+      {/* Thinking Overlay - sparks effect when AI is processing */}
+      <ThinkingOverlay
+        status={isProcessing ? "thinking" : "idle"}
+        showBorder={true}
+      />
+
+      {/* AI Mode Hint - shows in same style as HintViewer */}
+      {isAIModeActive && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: "80px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            pointerEvents: "none",
+            color: "var(--color-gray-40)",
+            fontSize: "0.75rem",
+            textAlign: "center",
+            zIndex: 100,
+          }}
+        >
+          <kbd
+            style={{
+              display: "inline-block",
+              margin: "0 2px",
+              fontFamily: "monospace",
+              border: "1px solid var(--color-gray-40)",
+              borderRadius: "4px",
+              padding: "1px 4px",
+              fontSize: "10px",
+            }}
+          >
+            Shift
+          </kbd>
+          +Click to place markers
+          {referencePoints.length > 0 && ` (${referencePoints.length} placed)`}
+        </div>
+      )}
+    </>
+  );
+};
+
+/**
+ * AI Edit button for the toolbar.
+ * Shows in top nav next to lock button.
+ * When active, shows a popover with Execute button.
+ */
+const AIToolbarButton: React.FC<{
+  excalidrawAPI: ExcalidrawImperativeAPI | null;
+}> = ({ excalidrawAPI }) => {
+  const {
+    openDialog,
+    isProcessing,
+    isAIModeActive,
+    enterAIMode,
+    exitAIMode,
+    referencePoints,
+    clearReferencePoints,
+    setCanvasImage,
+    setExportBounds,
+  } = useAIManipulation();
+
+  // Sync export bounds to coordinate highlight context for AI log coordinate display
+  const { setExportBounds: setCoordHighlightBounds } = useCoordinateHighlight();
+
+  // Default export padding (matches excalidraw's DEFAULT_EXPORT_PADDING)
+  const EXPORT_PADDING = 10;
+
+  // Capture canvas image and open dialog
+  const handleExecute = useCallback(async () => {
+    if (!excalidrawAPI) {
+      return;
+    }
+
+    try {
+      const elements = excalidrawAPI.getSceneElements();
+      const files = excalidrawAPI.getFiles();
+      const currentAppState = excalidrawAPI.getAppState();
+
+      // Calculate the bounds of all elements for coordinate transformation
+      // This matches how exportToBlob crops the image
+      const [minX, minY] = getCommonBounds(elements);
+
+      // Create export bounds for coordinate transformation
+      const exportBoundsData = {
+        minX,
+        minY,
+        exportPadding: EXPORT_PADDING,
+      };
+
+      // Set export bounds in both contexts:
+      // 1. AIManipulation context - for ManipulationDialog coordinate transformation
+      setExportBounds(exportBoundsData);
+      // 2. CoordinateHighlight context - for AI log hover coordinate display
+      setCoordHighlightBounds(exportBoundsData);
+
+      // Export canvas to blob
+      const blob = await exportToBlob({
+        elements,
+        appState: {
+          ...currentAppState,
+          exportBackground: true,
+          viewBackgroundColor: currentAppState.viewBackgroundColor,
+        },
+        files,
+        mimeType: MIME_TYPES.png,
+      });
+
+      // Convert blob to data URL and open dialog
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const imageData = reader.result as string;
+        setCanvasImage(imageData);
+        openDialog(imageData);
+      };
+      reader.readAsDataURL(blob);
+    } catch (error) {
+      console.error("Failed to capture canvas:", error);
+      setExportBounds(null);
+      setCoordHighlightBounds(null);
+      openDialog();
+    }
+  }, [
+    excalidrawAPI,
+    openDialog,
+    setCanvasImage,
+    setExportBounds,
+    setCoordHighlightBounds,
+  ]);
+
+  // Toggle AI mode
+  const handleToggle = useCallback(() => {
+    if (isAIModeActive) {
+      clearReferencePoints();
+      exitAIMode();
+    } else {
+      enterAIMode();
+    }
+  }, [isAIModeActive, clearReferencePoints, exitAIMode, enterAIMode]);
+
+  const canExecute = isAIModeActive && referencePoints.length > 0;
+
+  return (
+    <div style={{ position: "relative", display: "inline-flex" }}>
+      {/* Main AI button */}
+      <button
+        type="button"
+        onClick={handleToggle}
+        disabled={isProcessing}
+        title={isAIModeActive ? "Exit AI Edit mode" : "AI Edit"}
+        className="ToolIcon_type_button"
+        aria-label="AI Edit"
+        style={{
+          color: isAIModeActive ? "var(--color-primary)" : undefined,
+          backgroundColor: isAIModeActive
+            ? "var(--color-primary-light)"
+            : undefined,
+        }}
+      >
+        <div className="ToolIcon__icon" aria-hidden="true">
+          {MagicIcon}
+        </div>
+      </button>
+
+      {/* Popover when AI mode is active */}
+      {isAIModeActive && (
+        <div
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: "50%",
+            transform: "translateX(-50%)",
+            marginTop: "8px",
+            backgroundColor: "var(--island-bg-color)",
+            borderRadius: "8px",
+            boxShadow: "0 2px 12px rgba(0, 0, 0, 0.15)",
+            padding: "8px",
+            zIndex: 100,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {/* Arrow */}
+          <div
+            style={{
+              position: "absolute",
+              top: "-6px",
+              left: "50%",
+              transform: "translateX(-50%)",
+              width: 0,
+              height: 0,
+              borderLeft: "6px solid transparent",
+              borderRight: "6px solid transparent",
+              borderBottom: "6px solid var(--island-bg-color)",
+            }}
+          />
+          {/* Execute button */}
+          <button
+            type="button"
+            onClick={handleExecute}
+            disabled={!canExecute || isProcessing}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "6px 12px",
+              backgroundColor: canExecute
+                ? "var(--color-primary)"
+                : "var(--color-gray-30)",
+              color: canExecute ? "white" : "var(--color-gray-60)",
+              border: "none",
+              borderRadius: "6px",
+              cursor: canExecute ? "pointer" : "not-allowed",
+              fontSize: "13px",
+              fontWeight: 500,
+            }}
+          >
+            {isProcessing ? (
+              <>
+                <span
+                  style={{
+                    width: "12px",
+                    height: "12px",
+                    border: "2px solid currentColor",
+                    borderTopColor: "transparent",
+                    borderRadius: "50%",
+                    animation: "spin 1s linear infinite",
+                  }}
+                />
+                Processing...
+              </>
+            ) : (
+              <>
+                {MagicIcon}
+                Execute
+                {referencePoints.length > 0 && ` (${referencePoints.length})`}
+              </>
+            )}
+          </button>
+          <style>
+            {`
+              @keyframes spin {
+                to { transform: rotate(360deg); }
+              }
+            `}
+          </style>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * Wrapper component that injects AIToolbarButton into the main toolbar via tunnel.
+ * This component should be rendered as a child of Excalidraw.
+ */
+const AIToolbarTunnelContent: React.FC<{
+  excalidrawAPI: ExcalidrawImperativeAPI | null;
+}> = ({ excalidrawAPI }) => {
+  const { AIToolbarTunnel } = useTunnels();
+
+  return (
+    <AIToolbarTunnel.In>
+      <AIToolbarButton excalidrawAPI={excalidrawAPI} />
+    </AIToolbarTunnel.In>
+  );
 };
 
 const ExcalidrawWrapper = () => {
@@ -896,6 +1463,7 @@ const ExcalidrawWrapper = () => {
               )}
 
               {collabError.message && <CollabError collabError={collabError} />}
+
               <LiveCollaborationTrigger
                 isCollaborating={isCollaborating}
                 onSelect={() =>
@@ -947,6 +1515,15 @@ const ExcalidrawWrapper = () => {
         </OverwriteConfirmDialog>
         <AppFooter onChange={() => excalidrawAPI?.refresh()} />
         {excalidrawAPI && <AIComponents excalidrawAPI={excalidrawAPI} />}
+
+        {/* AI Edit button injected into toolbar via tunnel */}
+        <AIToolbarTunnelContent excalidrawAPI={excalidrawAPI} />
+
+        {/* AI Manipulation UI - Reference Points Overlay, Shift+Click Handler & Dialog */}
+        <AIManipulationUI excalidrawAPI={excalidrawAPI} />
+
+        {/* Coordinate Highlight Overlay - shows crosshair/region when hovering coordinates in AI log */}
+        <CoordinateHighlightOverlay excalidrawAPI={excalidrawAPI} />
 
         <TTDDialogTrigger />
         {isCollaborating && isOffline && (
@@ -1206,7 +1783,11 @@ const ExcalidrawApp = () => {
   return (
     <TopErrorBoundary>
       <Provider store={appJotaiStore}>
-        <ExcalidrawWrapper />
+        <CoordinateHighlightProvider>
+          <AIManipulationProvider>
+            <ExcalidrawWrapper />
+          </AIManipulationProvider>
+        </CoordinateHighlightProvider>
       </Provider>
     </TopErrorBoundary>
   );

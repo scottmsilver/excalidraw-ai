@@ -351,6 +351,7 @@ const LayerUI = ({
                               title={t("toolBar.penMode")}
                               penDetected={appState.penDetected}
                             />
+                            <tunnels.AIToolbarTunnel.Out />
                             <LockButton
                               checked={appState.activeTool.locked}
                               onChange={onLockToggle}

@@ -2373,3 +2373,39 @@ export const presentationIcon = createIcon(
   </g>,
   tablerIconProps,
 );
+
+// lucide: list-end (for auto-scroll toggle)
+export const listEndIcon = createIcon(
+  <g strokeWidth="2">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M16 12H3" />
+    <path d="M16 6H3" />
+    <path d="M10 18H3" />
+    <path d="M21 6v10a2 2 0 0 1-2 2h-5" />
+    <path d="M16 16l-2 2l2 2" />
+  </g>,
+  tablerIconProps,
+);
+
+// lucide: arrow-down-to-line (for scroll to bottom)
+export const arrowDownToLineIcon = createIcon(
+  <g strokeWidth="2">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M12 17V3" />
+    <path d="M6 11l6 6l6 -6" />
+    <path d="M19 21H5" />
+  </g>,
+  tablerIconProps,
+);
+
+// lucide: file-code (for copy raw with data)
+export const fileCodeIcon = createIcon(
+  <g strokeWidth="2">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <path d="M14 2v6h6" />
+    <path d="M10 13l-2 2l2 2" />
+    <path d="M14 13l2 2l-2 2" />
+  </g>,
+  tablerIconProps,
+);

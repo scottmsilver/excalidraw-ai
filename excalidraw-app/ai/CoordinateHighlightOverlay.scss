@@ -1,0 +1,81 @@
+/**
+ * Coordinate Highlight Overlay Styles
+ *
+ * Renders visual indicators on the canvas for highlighted coordinates.
+ * - Points: crosshair with center dot
+ * - Regions: dashed bounding box with fill
+ */
+
+.coord-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 100;
+}
+
+// Crosshair for point coordinates
+.coord-overlay__crosshair {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+
+.coord-overlay__crosshair-h,
+.coord-overlay__crosshair-v {
+  position: absolute;
+  background: #2196f3;
+}
+
+.coord-overlay__crosshair-h {
+  width: 24px;
+  height: 2px;
+  left: -12px;
+  top: -1px;
+}
+
+.coord-overlay__crosshair-v {
+  width: 2px;
+  height: 24px;
+  left: -1px;
+  top: -12px;
+}
+
+.coord-overlay__point {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #2196f3;
+  border: 2px solid white;
+  border-radius: 50%;
+  left: -4px;
+  top: -4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+// Bounding box for region coordinates
+.coord-overlay__region {
+  position: absolute;
+  border: 2px dashed #ff6b00;
+  background: rgba(255, 107, 0, 0.15);
+  border-radius: 2px;
+}
+
+// Coordinate label tooltip
+.coord-overlay__label {
+  position: absolute;
+  background: rgba(33, 150, 243, 0.95);
+  color: white;
+  font-size: 11px;
+  font-family: monospace;
+  font-weight: 500;
+  padding: 3px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+
+  &--region {
+    background: rgba(255, 107, 0, 0.95);
+  }
+}
