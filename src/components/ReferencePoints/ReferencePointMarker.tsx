@@ -30,8 +30,6 @@ const MARKER_STYLES = {
   shadow: "0 2px 4px rgba(0,0,0,0.2)",
   /** Remove button size */
   removeButtonSize: 16,
-  /** Center dot size to indicate exact position */
-  centerDotSize: 6,
 } as const;
 
 /**
@@ -65,7 +63,6 @@ export const ReferencePointMarker: React.FC<ReferencePointMarkerProps> = ({
   const scaledFontSize = MARKER_STYLES.fontSize / scale;
   const scaledBorderWidth = MARKER_STYLES.borderWidth / scale;
   const scaledRemoveSize = MARKER_STYLES.removeButtonSize / scale;
-  const scaledCenterDot = MARKER_STYLES.centerDotSize / scale;
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {

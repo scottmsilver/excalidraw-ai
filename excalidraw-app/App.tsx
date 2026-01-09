@@ -444,6 +444,7 @@ const AIManipulationUI: React.FC<{
     exitAIMode,
     isAIModeActive,
     isProcessing,
+    progress,
     addPoint,
     exportBounds,
   } = useAIManipulation();
@@ -668,10 +669,11 @@ const AIManipulationUI: React.FC<{
         exportBounds={exportBounds ?? undefined}
       />
 
-      {/* Thinking Overlay - sparks effect when AI is processing */}
+      {/* Thinking Overlay - sparks effect and interim proposals when AI is processing */}
       <ThinkingOverlay
         status={isProcessing ? "thinking" : "idle"}
-        showBorder={true}
+        showBorder={false}
+        image={progress?.iterationImage}
       />
 
       {/* AI Mode Hint - shows in same style as HintViewer */}

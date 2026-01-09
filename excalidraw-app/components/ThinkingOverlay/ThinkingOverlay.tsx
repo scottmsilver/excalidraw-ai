@@ -9,6 +9,8 @@ interface ThinkingOverlayProps {
   status: ThinkingStatus;
   /** Whether to show the rainbow border animation */
   showBorder?: boolean;
+  /** Semi-transparent interim proposal image (base64 data URL) */
+  image?: string | null;
 }
 
 /**
@@ -26,6 +28,7 @@ interface ThinkingOverlayProps {
 export const ThinkingOverlay: React.FC<ThinkingOverlayProps> = ({
   status,
   showBorder = true,
+  image = null,
 }) => {
   // Track flash animation state
   const [showFlash, setShowFlash] = useState(false);
@@ -81,6 +84,15 @@ export const ThinkingOverlay: React.FC<ThinkingOverlayProps> = ({
 
   return (
     <div className={wrapperClass}>
+      {/* Semi-transparent interim proposal image */}
+      {image && (
+        <img
+          src={image}
+          alt="AI iteration preview"
+          className="thinking-overlay__image"
+        />
+      )}
+
       {/* Initial flash wash effect */}
       <div className="thinking-overlay__flash" />
 

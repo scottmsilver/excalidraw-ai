@@ -226,6 +226,7 @@ async function ssePostRequest<TComplete, TProgress>(
                   step: data.step,
                   message: data.message,
                   hasInputImages: data.inputImages?.length ?? 0,
+                  hasIterationImage: !!data.iterationImage,
                 });
                 options.onProgress?.(data);
               } else if (ev.event === "complete") {

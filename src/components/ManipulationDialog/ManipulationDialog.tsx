@@ -24,6 +24,7 @@ import React, {
 import { executeAgenticEdit } from "../../services/agenticService";
 import { aiLogService } from "../../../excalidraw-app/ai/aiLogService";
 import { canvasToImage } from "../../utils/coordinateTransforms";
+import { useAIManipulation } from "../../providers/AIManipulationProvider";
 
 import type { ReferencePoint } from "../ReferencePoints";
 
@@ -289,6 +290,9 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
   onResult,
   exportBounds,
 }) => {
+  // Get context setters for syncing progress state to ThinkingOverlay
+  const { setIsProcessing, setProgress } = useAIManipulation();
+
   const [state, setState] = useState<ManipulationDialogState>(INITIAL_STATE);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [hoveredPoint, setHoveredPoint] = useState<ReferencePoint | null>(null);
@@ -406,6 +410,8 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
   // Refs to accumulate streaming text (deltas)
   const accumulatedThinkingRef = useRef<string>("");
   const accumulatedRawOutputRef = useRef<string>("");
+  // Ref to preserve iterationImage across progress events (it only comes once per iteration)
+  const lastIterationImageRef = useRef<string | null>(null);
 
   // Check if submit should be enabled
   const canSubmit =
@@ -418,46 +424,61 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
    * Handle progress events from SSE stream
    * Supports both full text (thinkingText, rawOutput) and deltas (thinkingTextDelta, rawOutputDelta)
    */
-  const handleProgress = useCallback((event: AIProgressEvent) => {
-    // Handle thinking text - either full or delta
-    let thinkingText = event.thinkingText;
-    if (event.thinkingTextDelta) {
-      accumulatedThinkingRef.current += event.thinkingTextDelta;
-      thinkingText = accumulatedThinkingRef.current;
-    } else if (event.thinkingText) {
-      // Full text replaces accumulated
-      accumulatedThinkingRef.current = event.thinkingText;
-    }
+  const handleProgress = useCallback(
+    (event: AIProgressEvent) => {
+      // Handle thinking text - either full or delta
+      let thinkingText = event.thinkingText;
+      if (event.thinkingTextDelta) {
+        accumulatedThinkingRef.current += event.thinkingTextDelta;
+        thinkingText = accumulatedThinkingRef.current;
+      } else if (event.thinkingText) {
+        // Full text replaces accumulated
+        accumulatedThinkingRef.current = event.thinkingText;
+      }
 
-    // Handle raw output - either full or delta
-    let rawOutput = event.rawOutput;
-    if (event.rawOutputDelta) {
-      accumulatedRawOutputRef.current += event.rawOutputDelta;
-      rawOutput = accumulatedRawOutputRef.current;
-    } else if (event.rawOutput) {
-      // Full text replaces accumulated
-      accumulatedRawOutputRef.current = event.rawOutput;
-    }
+      // Handle raw output - either full or delta
+      let rawOutput = event.rawOutput;
+      if (event.rawOutputDelta) {
+        accumulatedRawOutputRef.current += event.rawOutputDelta;
+        rawOutput = accumulatedRawOutputRef.current;
+      } else if (event.rawOutput) {
+        // Full text replaces accumulated
+        accumulatedRawOutputRef.current = event.rawOutput;
+      }
 
-    // Log to aiLogService for sidebar display
-    aiLogService.updateOperation({
-      step: event.step,
-      message: event.message || getStepMessage(event.step),
-      iteration: event.iteration,
-      thinkingText,
-      prompt: event.prompt,
-      rawOutput,
-      inputImages: event.inputImages,
-      iterationImage: event.iterationImage,
-    });
+      // Preserve iterationImage across events - update ref if new image arrives
+      if (event.iterationImage) {
+        lastIterationImageRef.current = event.iterationImage;
+      }
 
-    setState((prev) => ({
-      ...prev,
-      currentStep: event.step,
-      progressMessage: event.message || getStepMessage(event.step),
-      iteration: event.iteration,
-    }));
-  }, []);
+      // Sync progress to provider for ThinkingOverlay
+      // Use the preserved iterationImage if the current event doesn't have one
+      setProgress({
+        ...event,
+        iterationImage: event.iterationImage || lastIterationImageRef.current || undefined,
+      });
+
+      // Log to aiLogService for sidebar display
+      aiLogService.updateOperation({
+        step: event.step,
+        message: event.message || getStepMessage(event.step),
+        iteration: event.iteration,
+        thinkingText,
+        prompt: event.prompt,
+        rawOutput,
+        inputImages: event.inputImages,
+        iterationImage: event.iterationImage,
+      });
+
+      setState((prev) => ({
+        ...prev,
+        currentStep: event.step,
+        progressMessage: event.message || getStepMessage(event.step),
+        iteration: event.iteration,
+      }));
+    },
+    [setProgress],
+  );
 
   /**
    * Handle form submission
@@ -467,9 +488,10 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
       return;
     }
 
-    // Reset accumulated text for new operation
+    // Reset accumulated text and images for new operation
     accumulatedThinkingRef.current = "";
     accumulatedRawOutputRef.current = "";
+    lastIterationImageRef.current = null;
 
     // Transform reference points from canvas coordinates to image coordinates
     // if exportBounds is provided
@@ -488,6 +510,9 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
       "planning",
       `AI Edit: "${state.command.trim()}"`,
     );
+
+    // Set processing state for ThinkingOverlay
+    setIsProcessing(true);
 
     // Close dialog immediately - progress will show in sidebar
     onClose();
@@ -517,6 +542,9 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
 
       // Show error (could add toast notification here in future)
       console.error("AI Edit failed:", errorMessage);
+    } finally {
+      // Clear processing state
+      setIsProcessing(false);
     }
   }, [
     canSubmit,
@@ -527,6 +555,7 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
     handleProgress,
     onResult,
     onClose,
+    setIsProcessing,
   ]);
 
   /**

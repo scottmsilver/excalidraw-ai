@@ -128,6 +128,10 @@ export interface AIManipulationContextValue {
   executeEdit: (command: string, canvasBlob: Blob) => Promise<string>;
   /** Reset AI edit state (clear error, progress, etc.) */
   resetEditState: () => void;
+  /** Manually set processing state (for components that manage their own edit execution) */
+  setIsProcessing: (processing: boolean) => void;
+  /** Manually set progress event (for components that manage their own edit execution) */
+  setProgress: (event: AIProgressEvent | null) => void;
 }
 
 // =============================================================================
@@ -204,11 +208,34 @@ export function AIManipulationProvider({
   // AI edit hook
   const {
     execute: executeAgenticEdit,
-    isProcessing,
-    progress,
+    isProcessing: hookIsProcessing,
+    progress: hookProgress,
     error,
     reset: resetAgenticEdit,
   } = useAgenticEdit();
+
+  // Manual state overrides for components that call the service directly
+  const [manualIsProcessing, setManualIsProcessing] = useState(false);
+  const [manualProgress, setManualProgress] = useState<AIProgressEvent | null>(
+    null,
+  );
+
+  // Combined state: either from hook or manual override
+  const isProcessing = hookIsProcessing || manualIsProcessing;
+  const progress = hookProgress || manualProgress;
+
+  // Expose setters for manual control
+  const setIsProcessing = useCallback((processing: boolean) => {
+    setManualIsProcessing(processing);
+    if (!processing) {
+      // Clear progress when stopping processing
+      setManualProgress(null);
+    }
+  }, []);
+
+  const setProgress = useCallback((event: AIProgressEvent | null) => {
+    setManualProgress(event);
+  }, []);
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -289,6 +316,8 @@ export function AIManipulationProvider({
     // AI Edit actions
     executeEdit,
     resetEditState: resetAgenticEdit,
+    setIsProcessing,
+    setProgress,
   };
 
   return (
