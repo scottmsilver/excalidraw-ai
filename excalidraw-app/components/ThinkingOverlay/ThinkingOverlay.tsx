@@ -4,6 +4,35 @@ import "./ThinkingOverlay.scss";
 
 export type ThinkingStatus = "idle" | "thinking" | "accepted" | "rejected";
 
+/**
+ * Canvas bounds for coordinate transformation.
+ * These match the bounds used when exporting the canvas to an image.
+ */
+interface CanvasBounds {
+  /** Left edge of the content bounding box (canvas coordinates) */
+  minX: number;
+  /** Top edge of the content bounding box (canvas coordinates) */
+  minY: number;
+  /** Padding added during export */
+  exportPadding: number;
+  /** Width of the exported image in pixels */
+  imageWidth?: number;
+  /** Height of the exported image in pixels */
+  imageHeight?: number;
+}
+
+/**
+ * Viewport state for canvas-to-screen transformation.
+ */
+interface ViewportState {
+  /** Horizontal scroll offset */
+  scrollX: number;
+  /** Vertical scroll offset */
+  scrollY: number;
+  /** Current zoom level */
+  zoom: number;
+}
+
 interface ThinkingOverlayProps {
   /** Current status of the thinking process */
   status: ThinkingStatus;
@@ -11,6 +40,14 @@ interface ThinkingOverlayProps {
   showBorder?: boolean;
   /** Semi-transparent interim proposal image (base64 data URL) */
   image?: string | null;
+  /** Width of the exported image in pixels */
+  imageWidth?: number;
+  /** Height of the exported image in pixels */
+  imageHeight?: number;
+  /** Canvas bounds from export (for positioning) */
+  canvasBounds?: CanvasBounds | null;
+  /** Current viewport state (for zoom/scroll adjustments) */
+  viewport?: ViewportState | null;
 }
 
 /**
@@ -29,6 +66,10 @@ export const ThinkingOverlay: React.FC<ThinkingOverlayProps> = ({
   status,
   showBorder = true,
   image = null,
+  imageWidth,
+  imageHeight,
+  canvasBounds,
+  viewport,
 }) => {
   // Track flash animation state
   const [showFlash, setShowFlash] = useState(false);
@@ -60,6 +101,75 @@ export const ThinkingOverlay: React.FC<ThinkingOverlayProps> = ({
     }));
   }, [status]);
 
+  // Get the canvas container offset from viewport
+  // This is needed because ThinkingOverlay uses position:fixed (viewport-relative)
+  // but canvas coordinates assume (0,0) is at the canvas origin
+  const [canvasOffset, setCanvasOffset] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    const updateCanvasOffset = () => {
+      // Try multiple selectors to find the actual canvas area
+      const selectors = [
+        ".excalidraw .excalidraw-container",
+        ".excalidraw",
+        "[data-testid='excalidraw-container']",
+      ];
+
+      for (const selector of selectors) {
+        const element = document.querySelector(selector);
+        if (element) {
+          const rect = element.getBoundingClientRect();
+          setCanvasOffset({ top: rect.top, left: rect.left });
+          return;
+        }
+      }
+    };
+
+    // Update immediately
+    updateCanvasOffset();
+
+    // Also update on a short delay in case DOM isn't ready
+    const timer = setTimeout(updateCanvasOffset, 100);
+
+    return () => clearTimeout(timer);
+  }, [status]); // Re-check when status changes (overlay becomes visible)
+
+  // Calculate screen position and size for the interim image
+  // When we have canvas bounds and viewport, position the image to match the canvas location
+  const imageStyle = useMemo(() => {
+    // Use imageWidth/imageHeight from props or from canvasBounds
+    const imgW = imageWidth ?? canvasBounds?.imageWidth;
+    const imgH = imageHeight ?? canvasBounds?.imageHeight;
+
+    if (!canvasBounds || !viewport || !imgW || !imgH) {
+      // Fallback to centered positioning if we don't have canvas info
+      return undefined;
+    }
+
+    // The exported image top-left corner is at (minX - exportPadding, minY - exportPadding) in canvas space
+    const canvasX = canvasBounds.minX - canvasBounds.exportPadding;
+    const canvasY = canvasBounds.minY - canvasBounds.exportPadding;
+
+    // Convert canvas coordinates to screen coordinates
+    // Formula: screenX = (canvasX + scrollX) * zoom
+    // Then add canvas container offset since we're using position:fixed
+    const screenX =
+      (canvasX + viewport.scrollX) * viewport.zoom + canvasOffset.left;
+    const screenY =
+      (canvasY + viewport.scrollY) * viewport.zoom + canvasOffset.top;
+
+    // Scale the image dimensions by zoom
+    const screenWidth = imgW * viewport.zoom;
+    const screenHeight = imgH * viewport.zoom;
+
+    return {
+      left: `${screenX}px`,
+      top: `${screenY}px`,
+      width: `${screenWidth}px`,
+      height: `${screenHeight}px`,
+    } as React.CSSProperties;
+  }, [canvasBounds, viewport, imageWidth, imageHeight, canvasOffset]);
+
   // Don't render if status is idle
   if (status === "idle") {
     return null;
@@ -89,7 +199,10 @@ export const ThinkingOverlay: React.FC<ThinkingOverlayProps> = ({
         <img
           src={image}
           alt="AI iteration preview"
-          className="thinking-overlay__image"
+          className={`thinking-overlay__image${
+            imageStyle ? " thinking-overlay__image--positioned" : ""
+          }`}
+          style={imageStyle}
         />
       )}
 

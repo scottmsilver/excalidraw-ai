@@ -674,6 +674,10 @@ const AIManipulationUI: React.FC<{
         status={isProcessing ? "thinking" : "idle"}
         showBorder={false}
         image={progress?.iterationImage}
+        imageWidth={exportBounds?.imageWidth}
+        imageHeight={exportBounds?.imageHeight}
+        canvasBounds={exportBounds}
+        viewport={zoom !== undefined ? { scrollX, scrollY, zoom } : null}
       />
 
       {/* AI Mode Hint - shows in same style as HintViewer */}
@@ -751,13 +755,19 @@ const AIToolbarButton: React.FC<{
 
       // Calculate the bounds of all elements for coordinate transformation
       // This matches how exportToBlob crops the image
-      const [minX, minY] = getCommonBounds(elements);
+      const [minX, minY, maxX, maxY] = getCommonBounds(elements);
+
+      // Calculate image dimensions (includes padding on all sides)
+      const imageWidth = maxX - minX + 2 * EXPORT_PADDING;
+      const imageHeight = maxY - minY + 2 * EXPORT_PADDING;
 
       // Create export bounds for coordinate transformation
       const exportBoundsData = {
         minX,
         minY,
         exportPadding: EXPORT_PADDING,
+        imageWidth,
+        imageHeight,
       };
 
       // Set export bounds in both contexts:

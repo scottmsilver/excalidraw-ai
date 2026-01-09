@@ -30,6 +30,21 @@
   pointer-events: none;
   // Fade in animation
   animation: thinking-image-fade-in 0.3s ease-out forwards;
+
+  // When positioned with canvas coordinates, override centering
+  &--positioned {
+    // Use position: fixed for viewport-relative positioning
+    position: fixed;
+    top: 0;
+    left: 0;
+    // Critical: override the animation's transform
+    transform: none !important;
+    max-width: none;
+    max-height: none;
+    object-fit: fill;
+    // Use a different animation that doesn't transform
+    animation: thinking-image-positioned-fade-in 0.3s ease-out forwards;
+  }
 }
 
 // Animated gradient border
@@ -314,5 +329,15 @@
   100% {
     opacity: 0.7;
     transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+// Animation for positioned images (no transform)
+@keyframes thinking-image-positioned-fade-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0.7;
   }
 }

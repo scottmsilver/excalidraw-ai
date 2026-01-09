@@ -36,6 +36,10 @@ export interface ExportBounds {
   minY: number;
   /** Padding added around exported content (default: 10) */
   exportPadding: number;
+  /** Width of the exported image in pixels (optional, for positioning interim images) */
+  imageWidth?: number;
+  /** Height of the exported image in pixels (optional, for positioning interim images) */
+  imageHeight?: number;
 }
 
 /**
