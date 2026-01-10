@@ -270,164 +270,166 @@ export const ThinkingOverlay: React.FC<ThinkingOverlayProps> = ({
       </div>
 
       {/* Review mode images - rendered OUTSIDE main container for proper z-index layering */}
-      {status === "reviewing" && iterationImages.length > 0 && renderReviewImages && (
-        <>
-          {/* Original marked-up image (z-index 10, below pins) */}
-          {originalImage && (
+      {status === "reviewing" &&
+        iterationImages.length > 0 &&
+        renderReviewImages && (
+          <>
+            {/* Original marked-up image (z-index 10, below pins) */}
+            {originalImage && (
+              <img
+                src={originalImage}
+                alt="Original with markups"
+                className={`thinking-overlay__image thinking-overlay__image--reviewing thinking-overlay__image--original${
+                  imageStyle ? " thinking-overlay__image--positioned" : ""
+                }`}
+                style={{
+                  ...imageStyle,
+                  zIndex: 10,
+                }}
+              />
+            )}
+
+            {/* AI result image (z-index 20, above pins, with controlled opacity) */}
             <img
-              src={originalImage}
-              alt="Original with markups"
-              className={`thinking-overlay__image thinking-overlay__image--reviewing thinking-overlay__image--original${
+              src={iterationImages[reviewIndex]}
+              alt={`AI result ${reviewIndex + 1} of ${iterationImages.length}`}
+              className={`thinking-overlay__image thinking-overlay__image--reviewing thinking-overlay__image--ai-result${
                 imageStyle ? " thinking-overlay__image--positioned" : ""
               }`}
               style={{
                 ...imageStyle,
-                zIndex: 10,
+                zIndex: 20,
+                opacity: aiOpacity / 100,
               }}
             />
-          )}
 
-          {/* AI result image (z-index 20, above pins, with controlled opacity) */}
-          <img
-            src={iterationImages[reviewIndex]}
-            alt={`AI result ${reviewIndex + 1} of ${iterationImages.length}`}
-            className={`thinking-overlay__image thinking-overlay__image--reviewing thinking-overlay__image--ai-result${
-              imageStyle ? " thinking-overlay__image--positioned" : ""
-            }`}
-            style={{
-              ...imageStyle,
-              zIndex: 20,
-              opacity: aiOpacity / 100,
-            }}
-          />
-
-          {/* Review controls (z-index 100) */}
-          <div className="thinking-overlay__review-panel">
-            {/* Opacity comparison slider */}
-            <div className="thinking-overlay__comparison">
-              <span className="thinking-overlay__comparison-label">
-                {originalImage ? "Original" : "(no original)"}
-              </span>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={aiOpacity}
-                onChange={(e) => setAiOpacity(Number(e.target.value))}
-                className="thinking-overlay__comparison-slider"
-                aria-label="Compare original and AI result"
-              />
-              <span className="thinking-overlay__comparison-label">
-                AI {aiOpacity}%
-              </span>
-            </div>
-
-            {/* Navigation controls - only show if multiple iterations */}
-            {iterationImages.length > 1 && (
-              <div className="thinking-overlay__navigation">
-                <button
-                  type="button"
-                  className="thinking-overlay__nav-button"
-                  onClick={() =>
-                    setReviewIndex((i) =>
-                      i > 0 ? i - 1 : iterationImages.length - 1,
-                    )
-                  }
-                  aria-label="Previous iteration"
-                >
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polyline points="15 18 9 12 15 6" />
-                  </svg>
-                </button>
-                <span className="thinking-overlay__nav-indicator">
-                  {reviewIndex + 1} / {iterationImages.length}
+            {/* Review controls (z-index 100) */}
+            <div className="thinking-overlay__review-panel">
+              {/* Opacity comparison slider */}
+              <div className="thinking-overlay__comparison">
+                <span className="thinking-overlay__comparison-label">
+                  {originalImage ? "Original" : "(no original)"}
                 </span>
-                <button
-                  type="button"
-                  className="thinking-overlay__nav-button"
-                  onClick={() =>
-                    setReviewIndex((i) =>
-                      i < iterationImages.length - 1 ? i + 1 : 0,
-                    )
-                  }
-                  aria-label="Next iteration"
-                >
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polyline points="9 18 15 12 9 6" />
-                  </svg>
-                </button>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={aiOpacity}
+                  onChange={(e) => setAiOpacity(Number(e.target.value))}
+                  className="thinking-overlay__comparison-slider"
+                  aria-label="Compare original and AI result"
+                />
+                <span className="thinking-overlay__comparison-label">
+                  AI {aiOpacity}%
+                </span>
               </div>
-            )}
 
-            {/* Accept/Reject buttons */}
-            <div className="thinking-overlay__actions">
-              {onReject && (
-                <button
-                  type="button"
-                  className="thinking-overlay__action thinking-overlay__action--reject"
-                  onClick={onReject}
-                  aria-label="Reject AI result"
-                >
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+              {/* Navigation controls - only show if multiple iterations */}
+              {iterationImages.length > 1 && (
+                <div className="thinking-overlay__navigation">
+                  <button
+                    type="button"
+                    className="thinking-overlay__nav-button"
+                    onClick={() =>
+                      setReviewIndex((i) =>
+                        i > 0 ? i - 1 : iterationImages.length - 1,
+                      )
+                    }
+                    aria-label="Previous iteration"
                   >
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                  <span>Reject</span>
-                </button>
-              )}
-              {onAccept && (
-                <button
-                  type="button"
-                  className="thinking-overlay__action thinking-overlay__action--accept"
-                  onClick={() => onAccept(reviewIndex)}
-                  aria-label="Accept AI result"
-                >
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="15 18 9 12 15 6" />
+                    </svg>
+                  </button>
+                  <span className="thinking-overlay__nav-indicator">
+                    {reviewIndex + 1} / {iterationImages.length}
+                  </span>
+                  <button
+                    type="button"
+                    className="thinking-overlay__nav-button"
+                    onClick={() =>
+                      setReviewIndex((i) =>
+                        i < iterationImages.length - 1 ? i + 1 : 0,
+                      )
+                    }
+                    aria-label="Next iteration"
                   >
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span>Accept</span>
-                </button>
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </button>
+                </div>
               )}
+
+              {/* Accept/Reject buttons */}
+              <div className="thinking-overlay__actions">
+                {onReject && (
+                  <button
+                    type="button"
+                    className="thinking-overlay__action thinking-overlay__action--reject"
+                    onClick={onReject}
+                    aria-label="Reject AI result"
+                  >
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                    <span>Reject</span>
+                  </button>
+                )}
+                {onAccept && (
+                  <button
+                    type="button"
+                    className="thinking-overlay__action thinking-overlay__action--accept"
+                    onClick={() => onAccept(reviewIndex)}
+                    aria-label="Accept AI result"
+                  >
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    <span>Accept</span>
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        </>
-      )}
+          </>
+        )}
     </>
   );
 };

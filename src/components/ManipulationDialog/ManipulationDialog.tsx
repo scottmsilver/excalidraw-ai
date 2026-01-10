@@ -76,15 +76,15 @@ const styles = {
   dialog: {
     backgroundColor: "#fff",
     borderRadius: "8px",
-    padding: "24px",
-    minWidth: "400px",
-    maxWidth: "600px",
+    padding: "16px",
+    minWidth: "450px",
+    maxWidth: "700px",
     maxHeight: "90vh",
     overflow: "auto",
     boxShadow: "0 4px 20px rgba(0, 0, 0, 0.15)",
   },
   previewContainer: {
-    marginBottom: "16px",
+    marginBottom: "12px",
     border: "1px solid #ddd",
     borderRadius: "6px",
     overflow: "hidden",
@@ -96,37 +96,39 @@ const styles = {
   },
   previewImage: {
     width: "100%",
-    maxHeight: "300px",
+    maxHeight: "400px",
     objectFit: "contain" as const,
     display: "block",
   },
   previewLabel: {
-    padding: "8px 12px",
+    padding: "6px 10px",
     backgroundColor: "#f0f0f0",
-    fontSize: "12px",
+    fontSize: "11px",
     color: "#666",
     borderBottom: "1px solid #ddd",
   },
   title: {
-    margin: "0 0 16px 0",
-    fontSize: "18px",
+    margin: "0 0 12px 0",
+    fontSize: "16px",
     fontWeight: 600,
     color: "#333",
   },
   section: {
-    marginBottom: "16px",
+    marginBottom: "12px",
   },
   label: {
     display: "block",
-    marginBottom: "8px",
-    fontSize: "14px",
+    marginBottom: "6px",
+    fontSize: "13px",
     fontWeight: 500,
     color: "#555",
   },
   pointsContainer: {
     display: "flex",
-    gap: "8px",
-    marginBottom: "16px",
+    flexWrap: "wrap" as const,
+    gap: "6px",
+    maxHeight: "80px",
+    overflowY: "auto" as const,
   },
   pointIndicator: (backgroundColor: string, isHovered: boolean) => ({
     display: "inline-flex",
@@ -177,8 +179,8 @@ const styles = {
   },
   textArea: {
     width: "100%",
-    minHeight: "80px",
-    padding: "12px",
+    minHeight: "60px",
+    padding: "10px",
     border: "1px solid #ddd",
     borderRadius: "6px",
     fontSize: "14px",
@@ -414,11 +416,9 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
   const lastIterationImageRef = useRef<string | null>(null);
 
   // Check if submit should be enabled
+  // Reference points are optional - user can provide context via drawn annotations or just text
   const canSubmit =
-    !state.isLoading &&
-    state.command.trim().length > 0 &&
-    referencePoints.length > 0 &&
-    canvasBlob !== null;
+    !state.isLoading && state.command.trim().length > 0 && canvasBlob !== null;
 
   /**
    * Handle progress events from SSE stream
@@ -632,7 +632,9 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
           {/* Canvas Preview Section */}
           {previewUrl && (
             <div style={styles.previewContainer}>
-              <div style={styles.previewLabel}>Image being sent to AI</div>
+              <div style={styles.previewLabel}>
+                Image being sent to AI (includes your annotations)
+              </div>
               <div style={styles.previewImageWrapper}>
                 <img
                   ref={imageRef}
@@ -641,31 +643,36 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
                   style={styles.previewImage}
                   onLoad={handleImageLoad}
                 />
-                {/* Hover marker on preview image */}
-                {hoveredPoint &&
-                  imageDimensions &&
-                  (() => {
-                    const pos = getMarkerDisplayPosition(hoveredPoint);
+                {/* Always show all reference point markers on preview */}
+                {imageDimensions &&
+                  referencePoints.map((point) => {
+                    const pos = getMarkerDisplayPosition(point);
                     if (!pos) {
                       return null;
                     }
+                    const isHovered = hoveredPoint?.id === point.id;
                     const transformedPoint = transformedPoints.find(
-                      (p) => p.id === hoveredPoint.id,
+                      (p) => p.id === point.id,
                     );
                     return (
-                      <>
+                      <React.Fragment key={point.id}>
                         <div
                           style={{
                             ...styles.previewMarker(
-                              getMarkerColor(hoveredPoint.index),
+                              getMarkerColor(point.index),
                             ),
                             left: pos.x,
                             top: pos.y,
+                            transform: `translate(-50%, -50%) scale(${
+                              isHovered ? 1.2 : 1
+                            })`,
+                            transition: "transform 0.15s ease",
                           }}
                         >
-                          {hoveredPoint.label}
+                          {point.label}
                         </div>
-                        {transformedPoint && (
+                        {/* Show coords on hover */}
+                        {isHovered && transformedPoint && (
                           <div
                             style={{
                               ...styles.previewMarkerCoords,
@@ -677,41 +684,38 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
                             {Math.round(transformedPoint.y)})
                           </div>
                         )}
-                      </>
+                      </React.Fragment>
                     );
-                  })()}
+                  })}
               </div>
             </div>
           )}
 
-          {/* Reference Points Section */}
-          <div style={styles.section}>
-            <label style={styles.label}>
-              Reference Points (hover to see position)
-            </label>
-            <div style={styles.pointsContainer}>
-              {referencePoints.map((point) => (
-                <div
-                  key={point.id}
-                  style={styles.pointIndicator(
-                    getMarkerColor(point.index),
-                    hoveredPoint?.id === point.id,
-                  )}
-                  title={`Point ${point.label} - hover to see position on image`}
-                  onMouseEnter={() => setHoveredPoint(point)}
-                  onMouseLeave={() => setHoveredPoint(null)}
-                >
-                  {point.label}
-                </div>
-              ))}
+          {/* Reference Points Section - only show if there are points */}
+          {referencePoints.length > 0 && (
+            <div style={styles.section}>
+              <label style={styles.label}>
+                Reference Points ({referencePoints.length}) - hover to see
+                coordinates
+              </label>
+              <div style={styles.pointsContainer}>
+                {referencePoints.map((point) => (
+                  <div
+                    key={point.id}
+                    style={styles.pointIndicator(
+                      getMarkerColor(point.index),
+                      hoveredPoint?.id === point.id,
+                    )}
+                    title={`Point ${point.label}`}
+                    onMouseEnter={() => setHoveredPoint(point)}
+                    onMouseLeave={() => setHoveredPoint(null)}
+                  >
+                    {point.label}
+                  </div>
+                ))}
+              </div>
             </div>
-            {referencePoints.length === 0 && (
-              <p style={{ margin: 0, fontSize: "12px", color: "#888" }}>
-                Place at least one reference point on the canvas before
-                submitting.
-              </p>
-            )}
-          </div>
+          )}
 
           {/* Command Input Section */}
           <div style={styles.section}>

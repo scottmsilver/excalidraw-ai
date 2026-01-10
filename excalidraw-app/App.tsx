@@ -74,6 +74,7 @@ import {
 import type { RemoteExcalidrawElement } from "@excalidraw/excalidraw/data/reconcile";
 import type { RestoredDataState } from "@excalidraw/excalidraw/data/restore";
 import type {
+  ExcalidrawElement,
   FileId,
   NonDeletedExcalidrawElement,
   OrderedExcalidrawElement,
@@ -455,6 +456,21 @@ const AIManipulationUI: React.FC<{
     rejectResult,
   } = useAIManipulation();
 
+  // Scene snapshot for AI mode - stores elements before annotations are added
+  // This allows us to restore the scene on reject, or calculate proper bounds on accept
+  const elementsSnapshotRef = React.useRef<readonly ExcalidrawElement[]>([]);
+
+  // Capture snapshot when entering AI mode
+  React.useEffect(() => {
+    if (isAIModeActive && excalidrawAPI) {
+      // Store current elements (before any AI annotations are drawn)
+      const currentElements = excalidrawAPI.getSceneElements();
+      elementsSnapshotRef.current = currentElements.filter(
+        (el) => !el.isDeleted,
+      );
+    }
+  }, [isAIModeActive, excalidrawAPI]);
+
   // Get app state for overlay positioning
   const appState = excalidrawAPI?.getAppState();
   const zoom = appState?.zoom?.value ?? 1;
@@ -536,18 +552,16 @@ const AIManipulationUI: React.FC<{
           },
         ]);
 
-        // Calculate bounding box of all existing elements to match export size
-        const currentElements = excalidrawAPI.getSceneElements();
-        const nonDeletedElements = currentElements.filter(
-          (el) => !el.isDeleted,
-        );
+        // Use SNAPSHOT elements for bounds calculation (not current elements which include annotations)
+        // This ensures the AI result is positioned correctly based on the original content
+        const snapshotElements = elementsSnapshotRef.current;
 
         let minX = Infinity;
         let minY = Infinity;
         let maxX = -Infinity;
         let maxY = -Infinity;
 
-        for (const el of nonDeletedElements) {
+        for (const el of snapshotElements) {
           minX = Math.min(minX, el.x);
           minY = Math.min(minY, el.y);
           maxX = Math.max(maxX, el.x + (el.width || 0));
@@ -576,8 +590,9 @@ const AIManipulationUI: React.FC<{
           status: "saved",
         });
 
-        // Add to scene - need to sync fractional indices for proper ordering
-        const newElements = [...currentElements, imageElement];
+        // Clear scene and add only the AI result image
+        // This removes the original elements AND any annotations drawn during AI mode
+        const newElements = [imageElement];
 
         // Fix fractional indices (excalidraw requires proper ordering indices)
         const syncedElements = syncInvalidIndices(newElements);
@@ -608,13 +623,28 @@ const AIManipulationUI: React.FC<{
     [iterationImages, handleResult, acceptResult],
   );
 
-  // Handle reject - cancel and cleanup
+  // Handle reject - restore snapshot (removes annotations) and cleanup
   const handleReject = React.useCallback(() => {
+    // Restore the scene to the snapshot (removes any annotations drawn during AI mode)
+    if (excalidrawAPI && elementsSnapshotRef.current.length > 0) {
+      const syncedElements = syncInvalidIndices([
+        ...elementsSnapshotRef.current,
+      ]);
+      excalidrawAPI.updateScene({
+        elements: syncedElements,
+      });
+    }
     rejectResult();
     clearReferencePoints();
     exitAIMode();
     closeDialog();
-  }, [rejectResult, clearReferencePoints, exitAIMode, closeDialog]);
+  }, [
+    excalidrawAPI,
+    rejectResult,
+    clearReferencePoints,
+    exitAIMode,
+    closeDialog,
+  ]);
 
   // Shift+Click handler for placing markers + crosshair cursor
   useEffect(() => {
@@ -887,7 +917,11 @@ const AIToolbarButton: React.FC<{
     }
   }, [isAIModeActive, clearReferencePoints, exitAIMode, enterAIMode]);
 
-  const canExecute = isAIModeActive && referencePoints.length > 0;
+  // Allow execution when AI mode is active - user can provide context via:
+  // - Reference points (Shift+Click markers)
+  // - Drawn annotations (arrows, circles, text, etc.)
+  // - Just a text command (e.g., "make this brighter")
+  const canExecute = isAIModeActive;
 
   return (
     <div style={{ position: "relative", display: "inline-flex" }}>
