@@ -1,0 +1,30 @@
+# fly.toml app configuration file generated for screenmark-app on 2026-01-10T20:19:20-08:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'screenmark-app'
+primary_region = 'ord'
+
+[build]
+  dockerfile = 'Dockerfile.frontend'
+
+  [build.args]
+    VITE_API_BASE_URL = 'https://api.oursilverfamily.com'
+
+[env]
+  NODE_ENV = 'production'
+
+[http_service]
+  internal_port = 80
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '256mb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 256

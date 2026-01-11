@@ -272,11 +272,15 @@ async function ssePostRequest<TComplete, TProgress>(
 // API Endpoints
 // =============================================================================
 
-// Use relative URLs - Vite proxy handles /api/* -> http://localhost:8001
+// API base URL:
+// - Development: empty (Vite proxy handles /api/* -> localhost:8001)
+// - Production: set VITE_API_BASE_URL to the backend URL (e.g., https://screenmark-api.fly.dev)
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+
 const API_ENDPOINTS = {
-  AGENTIC_EDIT: "/api/agentic/edit",
-  GENERATE_IMAGE: "/api/images/generate",
-  INPAINT: "/api/images/inpaint",
+  AGENTIC_EDIT: `${API_BASE_URL}/api/agentic/edit`,
+  GENERATE_IMAGE: `${API_BASE_URL}/api/images/generate`,
+  INPAINT: `${API_BASE_URL}/api/images/inpaint`,
 } as const;
 
 // =============================================================================

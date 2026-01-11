@@ -1,0 +1,51 @@
+# Increase hash bucket size for long secret values
+map_hash_bucket_size 128;
+
+# Map to check if request has valid proxy secret
+map $http_x_proxy_secret $proxy_auth_valid {
+    default 0;
+    "${CF_ACCESS_SECRET}" 1;
+}
+
+server {
+    listen 80;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Health check endpoint - no auth required (for Fly.io)
+    location = /health {
+        access_log off;
+        return 200 'OK';
+        add_header Content-Type text/plain;
+    }
+
+    # All other requests require valid proxy secret (if CF_ACCESS_SECRET is set)
+    location / {
+        # If CF_ACCESS_SECRET is empty, allow all requests
+        # If set, require matching X-Proxy-Secret header
+        set $auth_check "${CF_ACCESS_SECRET}";
+        if ($auth_check != "") {
+            set $auth_check $proxy_auth_valid;
+        }
+        if ($auth_check = "0") {
+            return 403 'Forbidden: Access denied';
+        }
+
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Static assets with caching
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+        # Also check proxy secret for assets
+        set $auth_check "${CF_ACCESS_SECRET}";
+        if ($auth_check != "") {
+            set $auth_check $proxy_auth_valid;
+        }
+        if ($auth_check = "0") {
+            return 403 'Forbidden: Access denied';
+        }
+
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+}

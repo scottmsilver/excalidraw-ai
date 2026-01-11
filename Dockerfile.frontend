@@ -1,0 +1,46 @@
+# Frontend Dockerfile for Fly.io
+# Multi-stage build: Node for building, nginx for serving
+
+# Stage 1: Build the app
+FROM node:20-slim AS builder
+
+WORKDIR /app
+
+# Build args for environment variables
+ARG VITE_API_BASE_URL
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+# Disable ESLint during build (lint is already done in CI)
+ENV VITE_APP_ENABLE_ESLINT=false
+
+# Copy package files from monorepo root (yarn 1.x classic)
+COPY package.json yarn.lock ./
+COPY packages ./packages
+COPY excalidraw-app ./excalidraw-app
+COPY public ./public
+COPY scripts ./scripts
+COPY src ./src
+COPY tsconfig.json ./
+
+# Install dependencies with yarn 1.x
+RUN yarn install --frozen-lockfile
+
+# Build the app
+WORKDIR /app/excalidraw-app
+RUN yarn build
+
+# Stage 2: Serve with nginx
+FROM nginx:alpine
+
+# Copy built files
+COPY --from=builder /app/excalidraw-app/build /usr/share/nginx/html
+
+# Copy nginx config template (will be processed at runtime)
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+
+# Copy and set up entrypoint script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+EXPOSE 80
+
+ENTRYPOINT ["/docker-entrypoint.sh"]
