@@ -261,6 +261,7 @@ export function AIManipulationProvider({
   // Accept result at given index
   const acceptResult = useCallback((_index: number) => {
     setIsReviewing(false);
+    setIterationImages([]); // Clear images after accepting
   }, []);
 
   // Reject result
@@ -290,6 +291,8 @@ export function AIManipulationProvider({
 
   const closeDialog = useCallback(() => {
     setIsDialogOpen(false);
+    setIterationImages([]); // Clear images when dialog closes
+    setIsReviewing(false);
   }, []);
 
   const setCanvasImage = useCallback((image: string) => {
