@@ -6,7 +6,7 @@
  */
 
 import type { ReferencePoint } from "../ReferencePoints";
-import type { AIProgressEvent, AIProgressStep } from "../../services/types";
+import type { AIProgressEvent, AIProgressStep, ShapeMetadata } from "../../services/types";
 import type { ExportBounds } from "../../utils/coordinateTransforms";
 
 // Re-export ExportBounds for consumers
@@ -22,6 +22,8 @@ export interface ManipulationDialogProps {
   onClose: () => void;
   /** Reference points placed by the user (unlimited: A, B, C, ... Z, AA, AB, ...) */
   referencePoints: ReferencePoint[];
+  /** User-drawn shapes/annotations for AI context */
+  shapes?: ShapeMetadata[];
   /** Canvas image as Blob (from excalidraw exportToBlob) */
   canvasBlob: Blob | null;
   /** Callback when AI operation completes with result image */

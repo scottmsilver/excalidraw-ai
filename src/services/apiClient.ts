@@ -332,7 +332,7 @@ export async function agenticEdit(
   prompt: string,
   options: AgenticEditOptions = {},
 ): Promise<AgenticEditResponse> {
-  const { mask, referencePoints, maxIterations, onProgress } = options;
+  const { mask, referencePoints, shapes, maxIterations, onProgress } = options;
 
   // Build request body matching Python AgenticEditRequest schema
   const requestBody = {
@@ -340,6 +340,7 @@ export async function agenticEdit(
     prompt,
     maskImage: mask,
     referencePoints,
+    shapes,
     maxIterations: maxIterations ?? 3,
   };
 
@@ -348,6 +349,7 @@ export async function agenticEdit(
     promptLength: prompt.length,
     hasMask: !!mask,
     referencePointCount: referencePoints?.length ?? 0,
+    shapeCount: shapes?.length ?? 0,
     maxIterations: requestBody.maxIterations,
   });
 
@@ -533,6 +535,7 @@ export async function inpaint(
 // Export Types
 // =============================================================================
 
+export { SHAPE_TYPES } from "./types";
 export type {
   AgenticEditResponse,
   AgenticEditOptions,
@@ -542,4 +545,6 @@ export type {
   InpaintOptions,
   InpaintResponse,
   ReferencePoint,
+  ShapeMetadata,
+  ShapeType,
 } from "./types";

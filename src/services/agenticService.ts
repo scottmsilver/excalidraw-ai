@@ -23,7 +23,7 @@
 
 import { toApiReferencePoints } from "../components/ReferencePoints";
 
-import { agenticEdit, type AIProgressEvent } from "./apiClient";
+import { agenticEdit, type AIProgressEvent, type ShapeMetadata } from "./apiClient";
 
 import type { ReferencePoint } from "../components/ReferencePoints";
 
@@ -39,6 +39,8 @@ export interface AgenticEditParams {
   canvasBlob: Blob;
   /** Reference points placed on the canvas (A, B, C markers) */
   referencePoints: ReferencePoint[];
+  /** User-drawn shapes/annotations for context (lines, arrows, rectangles, etc.) */
+  shapes?: ShapeMetadata[];
   /** User's edit command (e.g., "Move A to B", "Make A red") */
   command: string;
   /** Optional mask image as base64 data URL for inpainting */
@@ -151,6 +153,7 @@ export async function executeAgenticEdit(
   const {
     canvasBlob,
     referencePoints,
+    shapes,
     command,
     mask,
     maxIterations,
@@ -167,6 +170,7 @@ export async function executeAgenticEdit(
   const response = await agenticEdit(imageBase64, command, {
     mask,
     referencePoints: apiReferencePoints,
+    shapes,
     maxIterations,
     onProgress,
   });

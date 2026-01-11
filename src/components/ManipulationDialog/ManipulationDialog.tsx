@@ -288,6 +288,7 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
   isOpen,
   onClose,
   referencePoints,
+  shapes,
   canvasBlob,
   onResult,
   exportBounds,
@@ -522,6 +523,7 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
       await executeAgenticEdit({
         canvasBlob,
         referencePoints: transformedReferencePoints,
+        shapes,
         command: state.command.trim(),
         onProgress: handleProgress,
       });

@@ -33,6 +33,79 @@ export interface ReferencePoint {
 }
 
 // =============================================================================
+// Shape Metadata (for user-drawn annotations)
+// =============================================================================
+
+/** A 2D point coordinate */
+export interface Point2D {
+  x: number;
+  y: number;
+}
+
+/** Bounding box for a shape */
+export interface BoundingBox {
+  /** Top-left X coordinate */
+  x: number;
+  /** Top-left Y coordinate */
+  y: number;
+  /** Width in pixels */
+  width: number;
+  /** Height in pixels */
+  height: number;
+}
+
+/** Shape types that can be extracted from the canvas and sent to the AI */
+export const SHAPE_TYPES = [
+  "line",
+  "arrow",
+  "rectangle",
+  "ellipse",
+  "freedraw",
+  "text",
+  "diamond",
+] as const;
+
+/** Shape types supported for AI context */
+export type ShapeType = (typeof SHAPE_TYPES)[number];
+
+/**
+ * Metadata for a user-drawn shape/annotation on the canvas.
+ * Sent to the AI to help interpret user intent.
+ */
+export interface ShapeMetadata {
+  /** Shape type */
+  type: ShapeType;
+  /** Stroke color (e.g., '#ff0000') */
+  strokeColor: string;
+  /** Stroke width in pixels */
+  strokeWidth: number;
+  /** Fill color if any */
+  backgroundColor?: string;
+  /** Bounding box of the shape */
+  boundingBox: BoundingBox;
+
+  // Line/Arrow specific
+  /** Start point for lines/arrows */
+  startPoint?: Point2D;
+  /** End point for lines/arrows */
+  endPoint?: Point2D;
+  /** Whether line has start arrowhead */
+  hasStartArrowhead?: boolean;
+  /** Whether line has end arrowhead */
+  hasEndArrowhead?: boolean;
+
+  // Text specific
+  /** Text content for text elements */
+  textContent?: string;
+  /** Font size for text elements */
+  fontSize?: number;
+
+  // Freedraw specific
+  /** Number of points in freedraw path */
+  pointCount?: number;
+}
+
+// =============================================================================
 // SSE Event Types
 // =============================================================================
 
@@ -101,6 +174,8 @@ export interface AgenticEditRequest {
   mask?: string;
   /** Reference points for spatial commands */
   referencePoints?: ReferencePoint[];
+  /** User-drawn shapes/annotations for context */
+  shapes?: ShapeMetadata[];
   /** Maximum iterations for self-check loop (1-5, default 3) */
   maxIterations?: number;
 }
@@ -211,6 +286,8 @@ export interface AgenticEditOptions {
   mask?: string;
   /** Reference points for spatial commands */
   referencePoints?: ReferencePoint[];
+  /** User-drawn shapes/annotations for context */
+  shapes?: ShapeMetadata[];
   /** Max self-check iterations (default: 3) */
   maxIterations?: number;
   /** Callback for SSE progress events */

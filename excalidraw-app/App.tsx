@@ -98,6 +98,7 @@ import {
 import { ReferencePointsOverlay } from "../src/components/ReferencePoints";
 
 import { ManipulationDialog } from "../src/components/ManipulationDialog";
+import { extractShapesFromElements } from "../src/utils/shapeExtractor";
 
 import { ThinkingOverlay } from "./components/ThinkingOverlay";
 
@@ -520,6 +521,15 @@ const AIManipulationUI: React.FC<{
     [canvasImage],
   );
 
+  // Extract shapes for AI context when dialog is open
+  const shapes = React.useMemo(() => {
+    if (!isDialogOpen || !excalidrawAPI || !exportBounds) {
+      return [];
+    }
+    const elements = excalidrawAPI.getSceneElements();
+    return extractShapesFromElements(elements, exportBounds);
+  }, [isDialogOpen, excalidrawAPI, exportBounds]);
+
   // Handle result from AI manipulation
   const handleResult = useCallback(
     async (imageData: string) => {
@@ -757,6 +767,7 @@ const AIManipulationUI: React.FC<{
         isOpen={isDialogOpen}
         onClose={closeDialog}
         referencePoints={referencePoints}
+        shapes={shapes}
         canvasBlob={canvasBlob}
         onResult={handleResult}
         exportBounds={exportBounds ?? undefined}
