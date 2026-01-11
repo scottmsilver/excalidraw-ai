@@ -34,6 +34,11 @@ interface LinearElement extends BaseElement {
   points: readonly [number, number][];
   startArrowhead: string | null;
   endArrowhead: string | null;
+  /** When set, line uses cubic bezier curves between points */
+  roundness: { type: number; value?: number } | null;
+  /** Whether the start and end connect to form a closed polygon */
+  // Note: Excalidraw doesn't have a dedicated "polygon" flag for lines,
+  // but we can detect closure by comparing first and last points
 }
 
 interface TextElement extends BaseElement {
@@ -106,21 +111,45 @@ function extractElementMetadata(
   // Add type-specific properties
   if (element.type === "line" || element.type === "arrow") {
     const linearEl = element as LinearElement;
-    const points = linearEl.points;
+    const rawPoints = linearEl.points;
 
-    if (points.length >= 2) {
+    if (rawPoints.length >= 2) {
+      // Transform all points from canvas to image coordinates
       // Points are relative to element.x, element.y
-      const startCanvas = {
-        x: element.x + points[0][0],
-        y: element.y + points[0][1],
-      };
-      const endCanvas = {
-        x: element.x + points[points.length - 1][0],
-        y: element.y + points[points.length - 1][1],
-      };
+      const transformedPoints = rawPoints.map((pt) => {
+        const canvasPoint = {
+          x: element.x + pt[0],
+          y: element.y + pt[1],
+        };
+        return transformPoint(canvasPoint, bounds);
+      });
 
-      base.startPoint = transformPoint(startCanvas, bounds);
-      base.endPoint = transformPoint(endCanvas, bounds);
+      // Set start and end points (backwards compatible)
+      base.startPoint = transformedPoints[0];
+      base.endPoint = transformedPoints[transformedPoints.length - 1];
+
+      // Include all points for multi-segment lines/polylines
+      // Only include if there are more than 2 points (otherwise start/end are sufficient)
+      if (transformedPoints.length > 2) {
+        base.points = transformedPoints;
+      }
+
+      // Detect if line forms a closed polygon
+      // Check if first and last points are very close (within 5px threshold)
+      const firstPt = rawPoints[0];
+      const lastPt = rawPoints[rawPoints.length - 1];
+      const closureThreshold = 5;
+      const distance = Math.sqrt(
+        Math.pow(lastPt[0] - firstPt[0], 2) + Math.pow(lastPt[1] - firstPt[1], 2)
+      );
+      if (distance < closureThreshold && rawPoints.length > 2) {
+        base.isClosed = true;
+      }
+
+      // Check if line uses curves (bezier)
+      if (linearEl.roundness !== null) {
+        base.isCurved = true;
+      }
 
       if (element.type === "arrow") {
         base.hasStartArrowhead = linearEl.startArrowhead !== null;

@@ -101,14 +101,23 @@ export interface AIManipulationContextValue {
   openDialog: (canvasImage?: string) => void;
   /** Close the manipulation dialog */
   closeDialog: () => void;
-  /** Current canvas image (data URL) for manipulation */
-  canvasImage: string;
-  /** Set canvas image */
-  setCanvasImage: (image: string) => void;
+  /** Clean canvas image (data URL) - original without annotations */
+  cleanCanvasImage: string;
+  /** Annotated canvas image (data URL) - with user's drawings */
+  annotatedCanvasImage: string;
+  /** Set clean canvas image */
+  setCleanCanvasImage: (image: string) => void;
+  /** Set annotated canvas image */
+  setAnnotatedCanvasImage: (image: string) => void;
   /** Export bounds for coordinate transformation (canvas to image coords) */
   exportBounds: ExportBounds | null;
   /** Set export bounds when exporting canvas */
   setExportBounds: (bounds: ExportBounds | null) => void;
+
+  /** Scene elements snapshot (captured when entering AI mode, before annotations) */
+  elementsSnapshot: readonly unknown[];
+  /** Set elements snapshot */
+  setElementsSnapshot: (elements: readonly unknown[]) => void;
 
   // AI Edit State
   /** Whether an AI edit is currently processing */
@@ -126,10 +135,11 @@ export interface AIManipulationContextValue {
   /**
    * Execute an AI edit with the current reference points.
    * @param command - Natural language command (e.g., "Move A to B")
-   * @param canvasBlob - Canvas image as Blob
+   * @param cleanBlob - Clean canvas image as Blob (without annotations)
+   * @param annotatedBlob - Optional annotated canvas image as Blob (with annotations for AI guidance)
    * @returns Promise resolving to base64 image data URL
    */
-  executeEdit: (command: string, canvasBlob: Blob) => Promise<string>;
+  executeEdit: (command: string, cleanBlob: Blob, annotatedBlob?: Blob) => Promise<string>;
   /** Reset AI edit state (clear error, progress, etc.) */
   resetEditState: () => void;
   /** Manually set processing state (for components that manage their own edit execution) */
@@ -276,16 +286,14 @@ export function AIManipulationProvider({
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [canvasImage, setCanvasImageState] = useState("");
+  const [cleanCanvasImage, setCleanCanvasImageState] = useState("");
+  const [annotatedCanvasImage, setAnnotatedCanvasImageState] = useState("");
   const [exportBounds, setExportBoundsState] = useState<ExportBounds | null>(
     null,
   );
 
   // Dialog actions
-  const openDialog = useCallback((image?: string) => {
-    if (image) {
-      setCanvasImageState(image);
-    }
+  const openDialog = useCallback(() => {
     setIsDialogOpen(true);
   }, []);
 
@@ -295,19 +303,31 @@ export function AIManipulationProvider({
     setIsReviewing(false);
   }, []);
 
-  const setCanvasImage = useCallback((image: string) => {
-    setCanvasImageState(image);
+  const setCleanCanvasImage = useCallback((image: string) => {
+    setCleanCanvasImageState(image);
+  }, []);
+
+  const setAnnotatedCanvasImage = useCallback((image: string) => {
+    setAnnotatedCanvasImageState(image);
   }, []);
 
   const setExportBounds = useCallback((bounds: ExportBounds | null) => {
     setExportBoundsState(bounds);
   }, []);
 
+  // Elements snapshot - captures scene before annotations are added
+  const [elementsSnapshot, setElementsSnapshotState] = useState<readonly unknown[]>([]);
+
+  const setElementsSnapshot = useCallback((elements: readonly unknown[]) => {
+    setElementsSnapshotState(elements);
+  }, []);
+
   // Execute edit - converts blob and calls agentic service
   const executeEdit = useCallback(
-    async (command: string, canvasBlob: Blob): Promise<string> => {
+    async (command: string, cleanBlob: Blob, annotatedBlob?: Blob): Promise<string> => {
       const result = await executeAgenticEdit({
-        canvasBlob,
+        cleanImageBlob: cleanBlob,
+        annotatedImageBlob: annotatedBlob,
         referencePoints: points,
         command,
       });
@@ -342,10 +362,14 @@ export function AIManipulationProvider({
     isDialogOpen,
     openDialog,
     closeDialog,
-    canvasImage,
-    setCanvasImage,
+    cleanCanvasImage,
+    annotatedCanvasImage,
+    setCleanCanvasImage,
+    setAnnotatedCanvasImage,
     exportBounds,
     setExportBounds,
+    elementsSnapshot,
+    setElementsSnapshot,
 
     // AI Edit state
     isProcessing,

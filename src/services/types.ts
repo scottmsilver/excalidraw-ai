@@ -89,6 +89,12 @@ export interface ShapeMetadata {
   startPoint?: Point2D;
   /** End point for lines/arrows */
   endPoint?: Point2D;
+  /** All points in the line/polyline (for multi-segment lines) */
+  points?: Point2D[];
+  /** Whether the line forms a closed polygon */
+  isClosed?: boolean;
+  /** Whether the line uses curves (bezier) between points */
+  isCurved?: boolean;
   /** Whether line has start arrowhead */
   hasStartArrowhead?: boolean;
   /** Whether line has end arrowhead */
@@ -166,12 +172,14 @@ export interface AIProgressEvent {
  * This is the primary endpoint for AI-powered image editing.
  */
 export interface AgenticEditRequest {
-  /** Source image as base64 data URL */
-  image: string;
+  /** Clean source image as base64 data URL (no annotations) */
+  sourceImage: string;
+  /** Image with user annotations visible as base64 data URL (for AI to see what user marked) */
+  annotatedImage?: string;
   /** User's edit prompt/command (e.g., "Move A to B") */
   prompt: string;
   /** Optional mask image for inpainting (base64 data URL, white = edit area) */
-  mask?: string;
+  maskImage?: string;
   /** Reference points for spatial commands */
   referencePoints?: ReferencePoint[];
   /** User-drawn shapes/annotations for context */
@@ -282,6 +290,8 @@ export type OnProgressCallback = (event: AIProgressEvent) => void;
  * Options for agenticEdit function.
  */
 export interface AgenticEditOptions {
+  /** Image with user annotations visible (for AI to see what user marked) */
+  annotatedImage?: string;
   /** Optional mask for inpainting */
   mask?: string;
   /** Reference points for spatial commands */

@@ -289,7 +289,8 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
   onClose,
   referencePoints,
   shapes,
-  canvasBlob,
+  cleanImageBlob,
+  annotatedImageBlob,
   onResult,
   exportBounds,
 }) => {
@@ -313,9 +314,9 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
     }
   }, [isOpen]);
 
-  // Convert canvasBlob to data URL for preview
+  // Convert annotatedImageBlob to data URL for preview (shows user's drawings)
   useEffect(() => {
-    if (!canvasBlob) {
+    if (!annotatedImageBlob) {
       setPreviewUrl(null);
       return;
     }
@@ -324,12 +325,12 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
     reader.onloadend = () => {
       setPreviewUrl(reader.result as string);
     };
-    reader.readAsDataURL(canvasBlob);
+    reader.readAsDataURL(annotatedImageBlob);
 
     return () => {
       reader.abort();
     };
-  }, [canvasBlob]);
+  }, [annotatedImageBlob]);
 
   // Handle image load to get dimensions
   const handleImageLoad = useCallback(() => {
@@ -418,8 +419,9 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
 
   // Check if submit should be enabled
   // Reference points are optional - user can provide context via drawn annotations or just text
+  // cleanImageBlob is required (the image to edit), annotatedImageBlob is optional (for AI guidance)
   const canSubmit =
-    !state.isLoading && state.command.trim().length > 0 && canvasBlob !== null;
+    !state.isLoading && state.command.trim().length > 0 && cleanImageBlob !== null;
 
   /**
    * Handle progress events from SSE stream
@@ -486,7 +488,7 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
    * Handle form submission
    */
   const handleSubmit = useCallback(async () => {
-    if (!canSubmit || !canvasBlob) {
+    if (!canSubmit || !cleanImageBlob) {
       return;
     }
 
@@ -520,8 +522,10 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
     onClose();
 
     try {
+      // Send both clean image (to be edited) and annotated image (for AI guidance)
       await executeAgenticEdit({
-        canvasBlob,
+        cleanImageBlob,
+        annotatedImageBlob: annotatedImageBlob ?? undefined,
         referencePoints: transformedReferencePoints,
         shapes,
         command: state.command.trim(),
@@ -551,9 +555,11 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
     }
   }, [
     canSubmit,
-    canvasBlob,
+    cleanImageBlob,
+    annotatedImageBlob,
     state.command,
     referencePoints,
+    shapes,
     exportBounds,
     handleProgress,
     onClose,

@@ -332,11 +332,19 @@ export async function agenticEdit(
   prompt: string,
   options: AgenticEditOptions = {},
 ): Promise<AgenticEditResponse> {
-  const { mask, referencePoints, shapes, maxIterations, onProgress } = options;
+  const {
+    annotatedImage,
+    mask,
+    referencePoints,
+    shapes,
+    maxIterations,
+    onProgress,
+  } = options;
 
   // Build request body matching Python AgenticEditRequest schema
   const requestBody = {
     sourceImage: image,
+    annotatedImage, // Image with user annotations visible (for AI guidance)
     prompt,
     maskImage: mask,
     referencePoints,
@@ -346,6 +354,7 @@ export async function agenticEdit(
 
   debugLog("Agentic edit request", {
     hasImage: !!image,
+    hasAnnotatedImage: !!annotatedImage,
     promptLength: prompt.length,
     hasMask: !!mask,
     referencePointCount: referencePoints?.length ?? 0,

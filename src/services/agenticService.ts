@@ -35,8 +35,10 @@ import type { ReferencePoint } from "../components/ReferencePoints";
  * Parameters for executing an agentic edit operation.
  */
 export interface AgenticEditParams {
-  /** Canvas image as a Blob (from excalidraw exportToBlob) */
-  canvasBlob: Blob;
+  /** Clean source image as a Blob (original without annotations) */
+  cleanImageBlob: Blob;
+  /** Annotated image as a Blob (with user's drawings visible for AI guidance) */
+  annotatedImageBlob?: Blob;
   /** Reference points placed on the canvas (A, B, C markers) */
   referencePoints: ReferencePoint[];
   /** User-drawn shapes/annotations for context (lines, arrows, rectangles, etc.) */
@@ -151,7 +153,8 @@ export async function executeAgenticEdit(
   params: AgenticEditParams,
 ): Promise<AgenticEditResult> {
   const {
-    canvasBlob,
+    cleanImageBlob,
+    annotatedImageBlob,
     referencePoints,
     shapes,
     command,
@@ -160,14 +163,21 @@ export async function executeAgenticEdit(
     onProgress,
   } = params;
 
-  // Step 1: Convert blob to base64 data URL
-  const imageBase64 = await blobToBase64(canvasBlob);
+  // Step 1: Convert blobs to base64 data URLs
+  const cleanImageBase64 = await blobToBase64(cleanImageBlob);
+
+  // Convert annotated image if provided
+  const annotatedImageBase64 = annotatedImageBlob
+    ? await blobToBase64(annotatedImageBlob)
+    : undefined;
 
   // Step 2: Convert reference points to API format
   const apiReferencePoints = toApiReferencePoints(referencePoints);
 
   // Step 3: Call agentic edit API with SSE streaming
-  const response = await agenticEdit(imageBase64, command, {
+  // The clean image is what gets edited, the annotated image shows the AI what the user drew
+  const response = await agenticEdit(cleanImageBase64, command, {
+    annotatedImage: annotatedImageBase64,
     mask,
     referencePoints: apiReferencePoints,
     shapes,

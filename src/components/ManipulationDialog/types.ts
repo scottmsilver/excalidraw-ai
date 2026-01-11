@@ -24,8 +24,10 @@ export interface ManipulationDialogProps {
   referencePoints: ReferencePoint[];
   /** User-drawn shapes/annotations for AI context */
   shapes?: ShapeMetadata[];
-  /** Canvas image as Blob (from excalidraw exportToBlob) */
-  canvasBlob: Blob | null;
+  /** Clean source image as Blob (original without annotations - this is what gets edited) */
+  cleanImageBlob: Blob | null;
+  /** Annotated image as Blob (with user's drawings visible for AI guidance) */
+  annotatedImageBlob: Blob | null;
   /** Callback when AI operation completes with result image */
   onResult: (resultImage: string) => void;
   /**

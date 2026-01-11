@@ -442,7 +442,8 @@ const AIManipulationUI: React.FC<{
     clearReferencePoints,
     isDialogOpen,
     closeDialog,
-    canvasImage,
+    cleanCanvasImage,
+    annotatedCanvasImage,
     exitAIMode,
     isAIModeActive,
     isProcessing,
@@ -455,22 +456,20 @@ const AIManipulationUI: React.FC<{
     enterReviewMode,
     acceptResult,
     rejectResult,
+    elementsSnapshot,
+    setElementsSnapshot,
   } = useAIManipulation();
 
-  // Scene snapshot for AI mode - stores elements before annotations are added
+  // Capture snapshot when entering AI mode - stores elements before annotations are added
   // This allows us to restore the scene on reject, or calculate proper bounds on accept
-  const elementsSnapshotRef = React.useRef<readonly ExcalidrawElement[]>([]);
-
-  // Capture snapshot when entering AI mode
   React.useEffect(() => {
     if (isAIModeActive && excalidrawAPI) {
       // Store current elements (before any AI annotations are drawn)
       const currentElements = excalidrawAPI.getSceneElements();
-      elementsSnapshotRef.current = currentElements.filter(
-        (el) => !el.isDeleted,
-      );
+      const nonDeletedElements = currentElements.filter((el) => !el.isDeleted);
+      setElementsSnapshot(nonDeletedElements);
     }
-  }, [isAIModeActive, excalidrawAPI]);
+  }, [isAIModeActive, excalidrawAPI, setElementsSnapshot]);
 
   // Get app state for overlay positioning
   const appState = excalidrawAPI?.getAppState();
@@ -515,10 +514,15 @@ const AIManipulationUI: React.FC<{
     return "idle" as const;
   }, [isProcessing, isReviewing]);
 
-  // Convert canvasImage (data URL) to Blob for ManipulationDialog
-  const canvasBlob = React.useMemo(
-    () => dataURLToBlob(canvasImage),
-    [canvasImage],
+  // Convert canvas images (data URLs) to Blobs for ManipulationDialog
+  const cleanImageBlob = React.useMemo(
+    () => dataURLToBlob(cleanCanvasImage),
+    [cleanCanvasImage],
+  );
+
+  const annotatedImageBlob = React.useMemo(
+    () => dataURLToBlob(annotatedCanvasImage),
+    [annotatedCanvasImage],
   );
 
   // Extract shapes for AI context when dialog is open
@@ -564,7 +568,7 @@ const AIManipulationUI: React.FC<{
 
         // Use SNAPSHOT elements for bounds calculation (not current elements which include annotations)
         // This ensures the AI result is positioned correctly based on the original content
-        const snapshotElements = elementsSnapshotRef.current;
+        const snapshotElements = elementsSnapshot as readonly ExcalidrawElement[];
 
         let minX = Infinity;
         let minY = Infinity;
@@ -618,7 +622,7 @@ const AIManipulationUI: React.FC<{
       exitAIMode();
       closeDialog();
     },
-    [excalidrawAPI, clearReferencePoints, exitAIMode, closeDialog],
+    [excalidrawAPI, elementsSnapshot, clearReferencePoints, exitAIMode, closeDialog],
   );
 
   // Handle accept - apply the selected iteration image
@@ -636,9 +640,10 @@ const AIManipulationUI: React.FC<{
   // Handle reject - restore snapshot (removes annotations) and cleanup
   const handleReject = React.useCallback(() => {
     // Restore the scene to the snapshot (removes any annotations drawn during AI mode)
-    if (excalidrawAPI && elementsSnapshotRef.current.length > 0) {
+    const snapshotElements = elementsSnapshot as readonly ExcalidrawElement[];
+    if (excalidrawAPI && snapshotElements.length > 0) {
       const syncedElements = syncInvalidIndices([
-        ...elementsSnapshotRef.current,
+        ...snapshotElements,
       ]);
       excalidrawAPI.updateScene({
         elements: syncedElements,
@@ -650,6 +655,7 @@ const AIManipulationUI: React.FC<{
     closeDialog();
   }, [
     excalidrawAPI,
+    elementsSnapshot,
     rejectResult,
     clearReferencePoints,
     exitAIMode,
@@ -768,7 +774,8 @@ const AIManipulationUI: React.FC<{
         onClose={closeDialog}
         referencePoints={referencePoints}
         shapes={shapes}
-        canvasBlob={canvasBlob}
+        cleanImageBlob={cleanImageBlob}
+        annotatedImageBlob={annotatedImageBlob}
         onResult={handleResult}
         exportBounds={exportBounds ?? undefined}
       />
@@ -779,7 +786,7 @@ const AIManipulationUI: React.FC<{
         showBorder={false}
         image={progress?.iterationImage}
         iterationImages={iterationImages}
-        originalImage={canvasImage}
+        originalImage={cleanCanvasImage}
         imageWidth={exportBounds?.imageWidth}
         imageHeight={exportBounds?.imageHeight}
         canvasBounds={exportBounds}
@@ -840,8 +847,10 @@ const AIToolbarButton: React.FC<{
     exitAIMode,
     referencePoints,
     clearReferencePoints,
-    setCanvasImage,
+    setCleanCanvasImage,
+    setAnnotatedCanvasImage,
     setExportBounds,
+    elementsSnapshot,
   } = useAIManipulation();
 
   // Sync export bounds to coordinate highlight context for AI log coordinate display
@@ -850,20 +859,23 @@ const AIToolbarButton: React.FC<{
   // Default export padding (matches excalidraw's DEFAULT_EXPORT_PADDING)
   const EXPORT_PADDING = 10;
 
-  // Capture canvas image and open dialog
+  // Capture canvas images (clean + annotated) and open dialog
   const handleExecute = useCallback(async () => {
     if (!excalidrawAPI) {
       return;
     }
 
     try {
-      const elements = excalidrawAPI.getSceneElements();
+      const allElements = excalidrawAPI.getSceneElements();
       const files = excalidrawAPI.getFiles();
       const currentAppState = excalidrawAPI.getAppState();
 
+      // Get the snapshot elements (original before annotations)
+      const cleanElements = elementsSnapshot as readonly ExcalidrawElement[];
+
       // Calculate the bounds of all elements for coordinate transformation
       // This matches how exportToBlob crops the image
-      const [minX, minY, maxX, maxY] = getCommonBounds(elements);
+      const [minX, minY, maxX, maxY] = getCommonBounds(allElements);
 
       // Calculate image dimensions (includes padding on all sides)
       const imageWidth = maxX - minX + 2 * EXPORT_PADDING;
@@ -884,9 +896,9 @@ const AIToolbarButton: React.FC<{
       // 2. CoordinateHighlight context - for AI log hover coordinate display
       setCoordHighlightBounds(exportBoundsData);
 
-      // Export canvas to blob
-      const blob = await exportToBlob({
-        elements,
+      // Export ANNOTATED image (all elements including user's drawings)
+      const annotatedBlob = await exportToBlob({
+        elements: allElements,
         appState: {
           ...currentAppState,
           exportBackground: true,
@@ -896,14 +908,39 @@ const AIToolbarButton: React.FC<{
         mimeType: MIME_TYPES.png,
       });
 
-      // Convert blob to data URL and open dialog
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const imageData = reader.result as string;
-        setCanvasImage(imageData);
-        openDialog(imageData);
+      // Export CLEAN image (original elements only, no annotations)
+      // Use snapshot elements if available, otherwise fall back to all elements
+      const cleanElementsToExport = cleanElements.length > 0 ? cleanElements : allElements;
+      const cleanBlob = await exportToBlob({
+        elements: cleanElementsToExport,
+        appState: {
+          ...currentAppState,
+          exportBackground: true,
+          viewBackgroundColor: currentAppState.viewBackgroundColor,
+        },
+        files,
+        mimeType: MIME_TYPES.png,
+      });
+
+      // Convert blobs to data URLs
+      const blobToDataURL = (blob: Blob): Promise<string> => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
       };
-      reader.readAsDataURL(blob);
+
+      const [cleanImageData, annotatedImageData] = await Promise.all([
+        blobToDataURL(cleanBlob),
+        blobToDataURL(annotatedBlob),
+      ]);
+
+      // Set both images in context
+      setCleanCanvasImage(cleanImageData);
+      setAnnotatedCanvasImage(annotatedImageData);
+      openDialog();
     } catch (error) {
       console.error("Failed to capture canvas:", error);
       setExportBounds(null);
@@ -912,8 +949,10 @@ const AIToolbarButton: React.FC<{
     }
   }, [
     excalidrawAPI,
+    elementsSnapshot,
     openDialog,
-    setCanvasImage,
+    setCleanCanvasImage,
+    setAnnotatedCanvasImage,
     setExportBounds,
     setCoordHighlightBounds,
   ]);
