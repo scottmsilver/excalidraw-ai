@@ -12,7 +12,8 @@ import {
   getLineHeight,
 } from "@excalidraw/common";
 
-import type { Radians } from "@excalidraw/math";
+import type { LocalPoint, Radians } from "@excalidraw/math";
+import { pointFrom } from "@excalidraw/math";
 
 import type { MarkOptional, Merge } from "@excalidraw/common/utility-types";
 
@@ -48,6 +49,7 @@ import type {
   ExcalidrawArrowElement,
   ExcalidrawElbowArrowElement,
   ExcalidrawLineElement,
+  ExcalidrawCalloutElement,
 } from "./types";
 
 export type ElementConstructorOpts = MarkOptional<
@@ -542,5 +544,41 @@ export const newImageElement = (
     fileId: opts.fileId ?? null,
     scale: opts.scale ?? [1, 1],
     crop: opts.crop ?? null,
+  };
+};
+
+export const newCalloutElement = (
+  opts: {
+    type: "callout";
+    tailAttachment?: ExcalidrawCalloutElement["tailAttachment"];
+    tailTip?: ExcalidrawCalloutElement["tailTip"];
+    tailCurve?: ExcalidrawCalloutElement["tailCurve"];
+    tailArrowhead?: ExcalidrawCalloutElement["tailArrowhead"];
+  } & ElementConstructorOpts,
+): NonDeleted<ExcalidrawCalloutElement> => {
+  // Default tail attachment at bottom-center (0.625 = 62.5% around perimeter)
+  const tailAttachment = opts.tailAttachment ?? 0.625;
+  // Default dimensions if not provided
+  const width = opts.width || 100;
+  const height = opts.height || 100;
+  // Default tail tip pointing down from bottom-center
+  const tailTip =
+    opts.tailTip ?? pointFrom<LocalPoint>(width / 2, height + 40);
+  // Default curve factor (0.3 gives a nice gentle curve)
+  const tailCurve = opts.tailCurve ?? 0.3;
+  // Default arrowhead (same as arrow element default)
+  const tailArrowhead = opts.tailArrowhead ?? "arrow";
+
+  return {
+    // Pass the calculated width/height to ensure consistency
+    ..._newElementBase<ExcalidrawCalloutElement>("callout", {
+      ...opts,
+      width,
+      height,
+    }),
+    tailAttachment,
+    tailTip,
+    tailCurve,
+    tailArrowhead,
   };
 };

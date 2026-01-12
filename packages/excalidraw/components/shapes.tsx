@@ -11,6 +11,7 @@ import {
   TextIcon,
   ImageIcon,
   EraserIcon,
+  CalloutIcon,
 } from "./icons";
 
 import type { AppClassProperties } from "../types";
@@ -78,6 +79,13 @@ export const SHAPES = [
     key: null,
     numericKey: KEYS["9"],
     fillable: false,
+  },
+  {
+    icon: CalloutIcon,
+    value: "callout",
+    key: KEYS.C,
+    numericKey: undefined,
+    fillable: true,
   },
   {
     icon: EraserIcon,

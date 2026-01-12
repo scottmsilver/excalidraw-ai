@@ -354,6 +354,15 @@ export const EllipseIcon = createIcon(
   tablerIconProps,
 );
 
+// custom: callout/speech bubble
+export const CalloutIcon = createIcon(
+  <g strokeWidth="1.5">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M4 4h16a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-5l-3 4l-3 -4h-4a1 1 0 0 1 -1 -1v-10a1 1 0 0 1 1 -1" />
+  </g>,
+  tablerIconProps,
+);
+
 // tabler-icons: arrow-narrow-right
 export const ArrowIcon = createIcon(
   <g strokeWidth="1.5">

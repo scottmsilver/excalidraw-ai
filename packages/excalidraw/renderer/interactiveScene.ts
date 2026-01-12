@@ -32,7 +32,12 @@ import {
   isLinearElement,
   isLineElement,
   isTextElement,
+  isCalloutElement,
   LinearElementEditor,
+  getCalloutTailPoints,
+  getCalloutAttachmentGlobalCoords,
+  CALLOUT_HANDLE_SIZE,
+  CALLOUT_ATTACHMENT_HANDLE_SIZE,
 } from "@excalidraw/element";
 
 import { renderSelectionElement } from "@excalidraw/element";
@@ -54,6 +59,7 @@ import type {
 import type {
   ElementsMap,
   ExcalidrawBindableElement,
+  ExcalidrawCalloutElement,
   ExcalidrawElement,
   ExcalidrawFrameLikeElement,
   ExcalidrawImageElement,
@@ -185,6 +191,79 @@ const renderSingleLinearPoint = <Point extends GlobalPoint | LocalPoint>(
     !isPhantomPoint,
     !isOverlappingPoint || isSelected,
   );
+};
+
+const renderCalloutTailHandle = (
+  context: CanvasRenderingContext2D,
+  appState: InteractiveCanvasAppState,
+  element: NonDeleted<ExcalidrawCalloutElement>,
+) => {
+  context.save();
+  context.translate(appState.scrollX, appState.scrollY);
+  context.lineWidth = 1 / appState.zoom.value;
+
+  const { tipPoint } = getCalloutTailPoints(element);
+
+  // Transform tip point from local to global coordinates
+  // The element rotates around its center, not the top-left corner
+  const cx = element.x + element.width / 2;
+  const cy = element.y + element.height / 2;
+
+  // First get the unrotated global position
+  const unrotatedX = element.x + tipPoint[0];
+  const unrotatedY = element.y + tipPoint[1];
+
+  // Then rotate around the center
+  const cos = Math.cos(element.angle);
+  const sin = Math.sin(element.angle);
+  const dx = unrotatedX - cx;
+  const dy = unrotatedY - cy;
+  const globalTipX = cx + dx * cos - dy * sin;
+  const globalTipY = cy + dx * sin + dy * cos;
+
+  // Draw the tail tip handle
+  context.strokeStyle = "#5e5ad8";
+  context.setLineDash([]);
+  context.fillStyle = "rgba(255, 255, 255, 0.9)";
+
+  fillCircle(
+    context,
+    globalTipX,
+    globalTipY,
+    CALLOUT_HANDLE_SIZE / appState.zoom.value,
+    true,
+    true,
+  );
+
+  context.restore();
+};
+
+const renderCalloutAttachmentHandle = (
+  context: CanvasRenderingContext2D,
+  appState: InteractiveCanvasAppState,
+  element: NonDeleted<ExcalidrawCalloutElement>,
+) => {
+  context.save();
+  context.translate(appState.scrollX, appState.scrollY);
+  context.lineWidth = 1 / appState.zoom.value;
+
+  const [globalAttachX, globalAttachY] = getCalloutAttachmentGlobalCoords(element);
+
+  // Draw the attachment point handle (smaller, different color from tip)
+  context.strokeStyle = "#1864ab"; // darker blue for attachment point
+  context.setLineDash([]);
+  context.fillStyle = "rgba(208, 235, 255, 0.9)"; // light blue fill
+
+  fillCircle(
+    context,
+    globalAttachX,
+    globalAttachY,
+    CALLOUT_ATTACHMENT_HANDLE_SIZE / appState.zoom.value,
+    true,
+    true,
+  );
+
+  context.restore();
 };
 
 const renderBindingHighlightForBindableElement_simple = (
@@ -1301,6 +1380,23 @@ const _renderInteractiveScene = ({
         elementsMap,
       );
     }
+
+    // render selected callout tail and attachment handles
+    const isSingleCalloutSelected =
+      selectedElements.length === 1 && isCalloutElement(selectedElements[0]);
+    if (isSingleCalloutSelected && !selectedElements[0].locked) {
+      renderCalloutTailHandle(
+        context,
+        appState,
+        selectedElements[0] as NonDeleted<ExcalidrawCalloutElement>,
+      );
+      renderCalloutAttachmentHandle(
+        context,
+        appState,
+        selectedElements[0] as NonDeleted<ExcalidrawCalloutElement>,
+      );
+    }
+
     const selectionColor = renderConfig.selectionColor || oc.black;
 
     if (showBoundingBox) {

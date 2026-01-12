@@ -60,13 +60,16 @@ import {
   hasBoundTextElement,
   isMagicFrameElement,
   isImageElement,
+  isCalloutElement,
 } from "./typeChecks";
 import { getContainingFrame } from "./frame";
 import { getCornerRadius } from "./utils";
+import { getCalloutTailBounds } from "./callout";
 
 import { ShapeCache } from "./shape";
 
 import type {
+  ExcalidrawCalloutElement,
   ExcalidrawElement,
   ExcalidrawTextElement,
   NonDeletedExcalidrawElement,
@@ -98,6 +101,9 @@ const getCanvasPadding = (element: ExcalidrawElement) => {
         return 40;
       }
       return 20;
+    case "callout":
+      // Callout has a tail that can extend beyond bounds with an arrowhead
+      return 40;
     default:
       return 20;
   }
@@ -165,15 +171,27 @@ const cappedElementCanvasSize = (
 
   const padding = getCanvasPadding(element);
 
-  const [x1, y1, x2, y2] = getElementAbsoluteCoords(element, elementsMap);
-  const elementWidth =
-    isLinearElement(element) || isFreeDrawElement(element)
-      ? distance(x1, x2)
-      : element.width;
-  const elementHeight =
-    isLinearElement(element) || isFreeDrawElement(element)
-      ? distance(y1, y2)
-      : element.height;
+  let [x1, y1, x2, y2] = getElementAbsoluteCoords(element, elementsMap);
+
+  // For callout, extend bounds to include full tail (attach point, control point, tip)
+  // (but getElementAbsoluteCoords returns just the rectangle for selection/resize)
+  // Use local/unrotated coordinates - rotation is handled when drawing the canvas
+  if (isCalloutElement(element)) {
+    const [tailMinX, tailMinY, tailMaxX, tailMaxY] = getCalloutTailBounds(element);
+    x1 = Math.min(x1, element.x + tailMinX);
+    y1 = Math.min(y1, element.y + tailMinY);
+    x2 = Math.max(x2, element.x + tailMaxX);
+    y2 = Math.max(y2, element.y + tailMaxY);
+  }
+
+  // For elements with shapes that can extend beyond the element origin
+  // (linear elements, freedraw, callout with tail), use the full bounds
+  const useFullBounds =
+    isLinearElement(element) ||
+    isFreeDrawElement(element) ||
+    isCalloutElement(element);
+  const elementWidth = useFullBounds ? distance(x1, x2) : element.width;
+  const elementHeight = useFullBounds ? distance(y1, y2) : element.height;
 
   let width = elementWidth * window.devicePixelRatio + padding * 2;
   let height = elementHeight * window.devicePixelRatio + padding * 2;
@@ -226,8 +244,18 @@ const generateElementCanvas = (
   let canvasOffsetX = -100;
   let canvasOffsetY = 0;
 
-  if (isLinearElement(element) || isFreeDrawElement(element)) {
-    const [x1, y1] = getElementAbsoluteCoords(element, elementsMap);
+  if (isLinearElement(element) || isFreeDrawElement(element) || isCalloutElement(element)) {
+    // For elements that can have shapes extending beyond the element origin
+    // (linear elements with negative points, freedraw, callout with tail outside bounds),
+    // we need to translate the canvas to account for the offset
+    let [x1, y1] = getElementAbsoluteCoords(element, elementsMap);
+
+    // For callout, extend to include full tail bounds (unrotated - rotation happens when drawing)
+    if (isCalloutElement(element)) {
+      const [tailMinX, tailMinY] = getCalloutTailBounds(element);
+      x1 = Math.min(x1, element.x + tailMinX);
+      y1 = Math.min(y1, element.y + tailMinY);
+    }
 
     canvasOffsetX =
       element.x > x1
@@ -400,15 +428,17 @@ const drawElementOnCanvas = (
       break;
     }
     case "arrow":
-    case "line": {
+    case "line":
+    case "callout": {
       context.lineJoin = "round";
       context.lineCap = "round";
 
-      ShapeCache.generateElementShape(element, renderConfig).forEach(
-        (shape) => {
+      const shapes = ShapeCache.generateElementShape(element, renderConfig);
+      if (shapes) {
+        shapes.forEach((shape) => {
           rc.draw(shape);
-        },
-      );
+        });
+      }
       break;
     }
     case "freedraw": {
@@ -603,9 +633,25 @@ const drawElementFromCanvas = (
   const element = elementWithCanvas.element;
   const padding = getCanvasPadding(element);
   const zoom = elementWithCanvas.scale;
-  const [x1, y1, x2, y2] = getElementAbsoluteCoords(element, allElementsMap);
-  const cx = ((x1 + x2) / 2 + appState.scrollX) * window.devicePixelRatio;
-  const cy = ((y1 + y2) / 2 + appState.scrollY) * window.devicePixelRatio;
+  const [rectX1, rectY1, rectX2, rectY2] = getElementAbsoluteCoords(element, allElementsMap);
+
+  // For rotation, always use the rectangle center (not extended bounds)
+  const cx = ((rectX1 + rectX2) / 2 + appState.scrollX) * window.devicePixelRatio;
+  const cy = ((rectY1 + rectY2) / 2 + appState.scrollY) * window.devicePixelRatio;
+
+  // For canvas positioning, extend bounds to include full tail
+  let x1 = rectX1;
+  let y1 = rectY1;
+  let x2 = rectX2;
+  let y2 = rectY2;
+  if (isCalloutElement(element)) {
+    // Use full tail bounds (attach, control, tip) in local coordinates
+    const [tailMinX, tailMinY, tailMaxX, tailMaxY] = getCalloutTailBounds(element);
+    x1 = Math.min(x1, element.x + tailMinX);
+    y1 = Math.min(y1, element.y + tailMinY);
+    x2 = Math.max(x2, element.x + tailMaxX);
+    y2 = Math.max(y2, element.y + tailMaxY);
+  }
 
   context.save();
   context.scale(1 / window.devicePixelRatio, 1 / window.devicePixelRatio);
@@ -814,6 +860,7 @@ export const renderElement = (
     case "ellipse":
     case "line":
     case "arrow":
+    case "callout":
     case "image":
     case "text":
     case "iframe":
