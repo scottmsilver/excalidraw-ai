@@ -131,7 +131,12 @@ import {
   newIframeElement,
   newArrowElement,
   newElement,
+  newCalloutElement,
   newImageElement,
+  isCalloutElement,
+  isPointOnCalloutTailHandle,
+  isPointOnCalloutAttachmentHandle,
+  pointToPerimeterRatio,
   newLinearElement,
   newTextElement,
   refreshTextDimensions,
@@ -651,6 +656,17 @@ class App extends React.Component<AppProps, AppState> {
   private pendingPdfInsertPosition: { x: number; y: number } | null = null;
   // HEIC conversion state - tracks elements being converted
   private convertingElementIds: Set<string> = new Set();
+
+  // Tracks if we're currently dragging a callout's tail tip
+  private draggingCalloutTail: {
+    elementId: string;
+    startTip: [number, number];
+  } | null = null;
+  // Tracks if we're currently dragging a callout's attachment point
+  private draggingCalloutAttachment: {
+    elementId: string;
+    startRatio: number;
+  } | null = null;
   lastPointerDownEvent: React.PointerEvent<HTMLElement> | null = null;
   lastPointerUpEvent: React.PointerEvent<HTMLElement> | PointerEvent | null =
     null;
@@ -5689,6 +5705,15 @@ class App extends React.Component<AppProps, AppState> {
       return true;
     }
 
+    // Check if hitting a callout's tail tip (which is outside the element bounds)
+    if (isCalloutElement(element)) {
+      if (
+        isPointOnCalloutTailHandle(element, x, y, this.state.zoom.value)
+      ) {
+        return true;
+      }
+    }
+
     return hitElementItself({
       point: pointFrom(x, y),
       element,
@@ -7343,6 +7368,8 @@ class App extends React.Component<AppProps, AppState> {
         pointerDownState.lastCoords.x,
         pointerDownState.lastCoords.y,
       );
+    } else if (this.state.activeTool.type === "callout") {
+      this.createCalloutElementOnPointerDown(pointerDownState);
     } else if (
       this.state.activeTool.type !== "eraser" &&
       this.state.activeTool.type !== "hand" &&
@@ -7872,6 +7899,53 @@ class App extends React.Component<AppProps, AppState> {
           }
           if (ret.didAddPoint) {
             return true;
+          }
+        }
+
+        // Check for callout attachment point handle hit (check before tail since it's on perimeter)
+        if (selectedElements.length === 1 && isCalloutElement(selectedElements[0])) {
+          const calloutElement = selectedElements[0];
+          if (
+            !calloutElement.locked &&
+            isPointOnCalloutAttachmentHandle(
+              calloutElement,
+              pointerDownState.origin.x,
+              pointerDownState.origin.y,
+              this.state.zoom.value,
+            )
+          ) {
+            // We're clicking on the callout attachment handle
+            this.draggingCalloutAttachment = {
+              elementId: calloutElement.id,
+              startRatio: calloutElement.tailAttachment,
+            };
+            pointerDownState.hit.element = calloutElement;
+            // Block normal element dragging while we're dragging the attachment
+            pointerDownState.drag.blockDragging = true;
+          }
+        }
+
+        // Check for callout tail handle hit
+        if (selectedElements.length === 1 && isCalloutElement(selectedElements[0])) {
+          const calloutElement = selectedElements[0];
+          if (
+            !calloutElement.locked &&
+            !this.draggingCalloutAttachment && // Don't check tail if already dragging attachment
+            isPointOnCalloutTailHandle(
+              calloutElement,
+              pointerDownState.origin.x,
+              pointerDownState.origin.y,
+              this.state.zoom.value,
+            )
+          ) {
+            // We're clicking on the callout tail handle
+            this.draggingCalloutTail = {
+              elementId: calloutElement.id,
+              startTip: [calloutElement.tailTip[0], calloutElement.tailTip[1]],
+            };
+            pointerDownState.hit.element = calloutElement;
+            // Block normal element dragging while we're dragging the tail
+            pointerDownState.drag.blockDragging = true;
           }
         }
 
@@ -8825,6 +8899,49 @@ class App extends React.Component<AppProps, AppState> {
     });
   };
 
+  private createCalloutElementOnPointerDown = (
+    pointerDownState: PointerDownState,
+  ): void => {
+    const [gridX, gridY] = getGridPoint(
+      pointerDownState.origin.x,
+      pointerDownState.origin.y,
+      this.lastPointerDownEvent?.[KEYS.CTRL_OR_CMD]
+        ? null
+        : this.getEffectiveGridSize(),
+    );
+
+    const topLayerFrame = this.getTopLayerFrameAtSceneCoords({
+      x: gridX,
+      y: gridY,
+    });
+
+    const element = newCalloutElement({
+      type: "callout",
+      x: gridX,
+      y: gridY,
+      strokeColor: this.state.currentItemStrokeColor,
+      backgroundColor: this.state.currentItemBackgroundColor,
+      fillStyle: this.state.currentItemFillStyle,
+      strokeWidth: this.state.currentItemStrokeWidth,
+      strokeStyle: this.state.currentItemStrokeStyle,
+      roughness: this.state.currentItemRoughness,
+      opacity: this.state.currentItemOpacity,
+      roundness:
+        this.state.currentItemRoundness === "round"
+          ? { type: ROUNDNESS.ADAPTIVE_RADIUS }
+          : null,
+      locked: false,
+      frameId: topLayerFrame ? topLayerFrame.id : null,
+    });
+
+    this.scene.insertElement(element);
+
+    this.setState({
+      multiElement: null,
+      newElement: element,
+    });
+  };
+
   private maybeCacheReferenceSnapPoints(
     event: KeyboardModifiersObject,
     selectedElements: ExcalidrawElement[],
@@ -9015,6 +9132,77 @@ class App extends React.Component<AppProps, AppState> {
           return true;
         }
       }
+
+      // Handle callout attachment point dragging
+      if (this.draggingCalloutAttachment) {
+        const calloutElement = this.scene
+          .getNonDeletedElementsMap()
+          .get(this.draggingCalloutAttachment.elementId);
+        if (calloutElement && isCalloutElement(calloutElement)) {
+          // Calculate the pointer position in local coordinates
+          const cx = calloutElement.x + calloutElement.width / 2;
+          const cy = calloutElement.y + calloutElement.height / 2;
+
+          // Rotate pointer position around center (inverse rotation)
+          const cos = Math.cos(-calloutElement.angle);
+          const sin = Math.sin(-calloutElement.angle);
+          const dx = pointerCoords.x - cx;
+          const dy = pointerCoords.y - cy;
+          const rotatedX = cx + dx * cos - dy * sin;
+          const rotatedY = cy + dx * sin + dy * cos;
+
+          // Convert to local coordinates (relative to element top-left)
+          const localX = rotatedX - calloutElement.x;
+          const localY = rotatedY - calloutElement.y;
+
+          // Find nearest perimeter point and convert to ratio
+          const newRatio = pointToPerimeterRatio(
+            pointFrom<LocalPoint>(localX, localY),
+            calloutElement.width,
+            calloutElement.height,
+          );
+
+          this.scene.mutateElement(calloutElement, {
+            tailAttachment: newRatio,
+          });
+        }
+        return;
+      }
+
+      // Handle callout tail dragging
+      if (this.draggingCalloutTail) {
+        const calloutElement = this.scene
+          .getNonDeletedElementsMap()
+          .get(this.draggingCalloutTail.elementId);
+        if (calloutElement && isCalloutElement(calloutElement)) {
+          // Calculate the new tail tip in local coordinates
+          // The element rotates around its center, so we need to:
+          // 1. Get the element center
+          // 2. Rotate the pointer position around the center (inverse rotation)
+          // 3. Convert to local coordinates
+
+          const cx = calloutElement.x + calloutElement.width / 2;
+          const cy = calloutElement.y + calloutElement.height / 2;
+
+          // Rotate pointer position around center (inverse rotation)
+          const cos = Math.cos(-calloutElement.angle);
+          const sin = Math.sin(-calloutElement.angle);
+          const dx = pointerCoords.x - cx;
+          const dy = pointerCoords.y - cy;
+          const rotatedX = cx + dx * cos - dy * sin;
+          const rotatedY = cy + dx * sin + dy * cos;
+
+          // Convert to local coordinates (relative to element top-left)
+          const localX = rotatedX - calloutElement.x;
+          const localY = rotatedY - calloutElement.y;
+
+          this.scene.mutateElement(calloutElement, {
+            tailTip: pointFrom<LocalPoint>(localX, localY),
+          });
+        }
+        return;
+      }
+
       const elementsMap = this.scene.getNonDeletedElementsMap();
 
       if (this.state.selectedLinearElement) {
@@ -9804,6 +9992,10 @@ class App extends React.Component<AppProps, AppState> {
         snapLines: updateStable(prevState.snapLines, []),
         originSnapOffset: null,
       }));
+
+      // Reset callout dragging states
+      this.draggingCalloutTail = null;
+      this.draggingCalloutAttachment = null;
 
       // just in case, tool changes mid drag, always clean up
       this.lassoTrail.endPath();

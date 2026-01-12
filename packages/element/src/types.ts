@@ -97,6 +97,19 @@ export type ExcalidrawEllipseElement = _ExcalidrawElementBase & {
   type: "ellipse";
 };
 
+export type ExcalidrawCalloutElement = _ExcalidrawElementBase &
+  Readonly<{
+    type: "callout";
+    // Tail attachment point as ratio around perimeter (0-1), going clockwise from top-left
+    tailAttachment: number;
+    // Tail tip position relative to element origin
+    tailTip: LocalPoint;
+    // Bezier control point offset for curve (0 = straight, positive = curve outward)
+    tailCurve: number;
+    // Arrowhead type at the tail tip (same types as arrows)
+    tailArrowhead: Arrowhead | null;
+  }>;
+
 export type ExcalidrawEmbeddableElement = _ExcalidrawElementBase &
   Readonly<{
     type: "embeddable";
@@ -196,7 +209,8 @@ export type ExcalidrawRectanguloidElement =
   | ExcalidrawIframeLikeElement
   | ExcalidrawFrameLikeElement
   | ExcalidrawEmbeddableElement
-  | ExcalidrawSelectionElement;
+  | ExcalidrawSelectionElement
+  | ExcalidrawCalloutElement;
 
 /**
  * ExcalidrawElement should be JSON serializable and (eventually) contain
@@ -213,7 +227,8 @@ export type ExcalidrawElement =
   | ExcalidrawFrameElement
   | ExcalidrawMagicFrameElement
   | ExcalidrawIframeElement
-  | ExcalidrawEmbeddableElement;
+  | ExcalidrawEmbeddableElement
+  | ExcalidrawCalloutElement;
 
 export type ExcalidrawNonSelectionElement = Exclude<
   ExcalidrawElement,
@@ -265,13 +280,15 @@ export type ExcalidrawBindableElement =
   | ExcalidrawIframeElement
   | ExcalidrawEmbeddableElement
   | ExcalidrawFrameElement
-  | ExcalidrawMagicFrameElement;
+  | ExcalidrawMagicFrameElement
+  | ExcalidrawCalloutElement;
 
 export type ExcalidrawTextContainer =
   | ExcalidrawRectangleElement
   | ExcalidrawDiamondElement
   | ExcalidrawEllipseElement
-  | ExcalidrawArrowElement;
+  | ExcalidrawArrowElement
+  | ExcalidrawCalloutElement;
 
 export type ExcalidrawTextElementWithContainer = {
   containerId: ExcalidrawTextContainer["id"];

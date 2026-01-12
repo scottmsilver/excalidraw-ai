@@ -70,6 +70,7 @@ export type ActionName =
   | "changeArrowhead"
   | "changeArrowType"
   | "changeArrowProperties"
+  | "changeTailArrowhead"
   | "changeOpacity"
   | "changeFontSize"
   | "undo"

@@ -45,7 +45,10 @@ import {
   isLinearElement,
   isLineElement,
   isTextElement,
+  isCalloutElement,
 } from "./typeChecks";
+
+import { getCalloutTailPoints } from "./callout";
 
 import { getElementShape } from "./shape";
 
@@ -211,6 +214,45 @@ export class ElementBounds {
       const ww = Math.hypot(w * cos, h * sin);
       const hh = Math.hypot(h * cos, w * sin);
       bounds = [cx - ww, cy - hh, cx + ww, cy + hh];
+    } else if (isCalloutElement(element)) {
+      // Callout bounds include the rectangle body + tail tip
+      const { tipPoint } = getCalloutTailPoints(element);
+
+      // Get rotated corners of the rectangle body
+      const [x11, y11] = pointRotateRads(
+        pointFrom(x1, y1),
+        pointFrom(cx, cy),
+        element.angle,
+      );
+      const [x12, y12] = pointRotateRads(
+        pointFrom(x1, y2),
+        pointFrom(cx, cy),
+        element.angle,
+      );
+      const [x22, y22] = pointRotateRads(
+        pointFrom(x2, y2),
+        pointFrom(cx, cy),
+        element.angle,
+      );
+      const [x21, y21] = pointRotateRads(
+        pointFrom(x2, y1),
+        pointFrom(cx, cy),
+        element.angle,
+      );
+
+      // Get rotated tail tip (tipPoint is relative to element origin)
+      const [tipX, tipY] = pointRotateRads(
+        pointFrom(element.x + tipPoint[0], element.y + tipPoint[1]),
+        pointFrom(cx, cy),
+        element.angle,
+      );
+
+      // Include tail tip in bounds
+      const minX = Math.min(x11, x12, x22, x21, tipX);
+      const minY = Math.min(y11, y12, y22, y21, tipY);
+      const maxX = Math.max(x11, x12, x22, x21, tipX);
+      const maxY = Math.max(y11, y12, y22, y21, tipY);
+      bounds = [minX, minY, maxX, maxY];
     } else {
       const [x11, y11] = pointRotateRads(
         pointFrom(x1, y1),
@@ -280,6 +322,8 @@ export const getElementAbsoluteCoords = (
       ];
     }
   }
+  // Note: Callout bounds intentionally exclude tail tip so selection/resize
+  // handles stay on the rectangle body. Canvas sizing handles tail separately.
   return [
     element.x,
     element.y,

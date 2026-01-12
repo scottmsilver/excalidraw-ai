@@ -125,12 +125,21 @@ export const mutateElement = <TElement extends Mutable<ExcalidrawElement>>(
     return element;
   }
 
-  if (
+  // casting to any because can't use `in` operator
+  const { tailTip, tailAttachment, tailCurve, tailArrowhead } = updates as any;
+
+  const shouldInvalidateCache =
     typeof updates.height !== "undefined" ||
     typeof updates.width !== "undefined" ||
     typeof fileId != "undefined" ||
-    typeof points !== "undefined"
-  ) {
+    typeof points !== "undefined" ||
+    // Callout tail properties require shape regeneration
+    typeof tailTip !== "undefined" ||
+    typeof tailAttachment !== "undefined" ||
+    typeof tailCurve !== "undefined" ||
+    typeof tailArrowhead !== "undefined";
+
+  if (shouldInvalidateCache) {
     ShapeCache.delete(element);
   }
 
