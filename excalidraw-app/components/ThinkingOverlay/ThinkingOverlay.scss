@@ -59,7 +59,7 @@
   }
 }
 
-// Review panel - contains navigation and accept/reject buttons
+// Review panel - contains thumbnails, navigation and accept/reject buttons
 .thinking-overlay__review-panel {
   position: fixed;
   bottom: 24px;
@@ -71,6 +71,8 @@
   gap: 12px;
   z-index: 200; // Above everything within overlay
   pointer-events: auto;
+  // Needed for collecting state pseudo-element
+  isolation: isolate;
 }
 
 // Navigation controls for flipping through iterations
@@ -178,6 +180,151 @@
       transform: scale(1.1);
     }
   }
+}
+
+// Thumbnail strip for iteration images
+.thinking-overlay__thumbnails {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(30, 30, 30, 0.9);
+  backdrop-filter: blur(8px);
+  padding: 8px 12px;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  max-width: 90vw;
+  overflow-x: auto;
+
+  // Hide scrollbar but allow scrolling
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.thinking-overlay__thumbnail {
+  flex-shrink: 0;
+  width: 64px;
+  height: 64px;
+  border: none;
+  border-radius: 8px;
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+  position: relative;
+  background: rgba(255, 255, 255, 0.1);
+  transition: all 0.2s ease;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  &:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 12px rgba(255, 140, 0, 0.4);
+  }
+
+  &--selected {
+    box-shadow: 0 0 0 3px #ff8c00, 0 4px 12px rgba(255, 140, 0, 0.5);
+    transform: scale(1.08);
+  }
+
+  // Magical drop-in animation for new images
+  &--new {
+    animation: thumbnail-drop-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  // Placeholder for next image during processing
+  &--placeholder {
+    background: linear-gradient(135deg, rgba(255, 140, 0, 0.2) 0%, rgba(255, 69, 0, 0.2) 100%);
+    border: 2px dashed rgba(255, 140, 0, 0.5);
+    cursor: default;
+
+    &:hover {
+      transform: none;
+      box-shadow: none;
+    }
+  }
+}
+
+// Sparkle effect on new thumbnails
+.thinking-overlay__thumbnail-sparkle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 30% 30%,
+    rgba(255, 255, 255, 0.8) 0%,
+    transparent 50%
+  );
+  animation: thumbnail-sparkle 0.8s ease-out forwards;
+}
+
+// Spinner for placeholder thumbnail
+.thinking-overlay__thumbnail-spinner {
+  width: 24px;
+  height: 24px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border: 3px solid rgba(255, 140, 0, 0.3);
+  border-top-color: #ff8c00;
+  border-radius: 50%;
+  animation: spinner-rotate 1s linear infinite;
+}
+
+// Processing hint during thinking
+.thinking-overlay__processing-hint {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  background: rgba(30, 30, 30, 0.8);
+  backdrop-filter: blur(8px);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  &::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    background: #ff8c00;
+    border-radius: 50%;
+    animation: pulse-dot 1.5s ease-in-out infinite;
+  }
+}
+
+// Collecting state modifier for the review panel
+.thinking-overlay__review-panel--collecting {
+  // Add subtle pulsing border during collection
+  &::before {
+    content: "";
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    border-radius: 26px;
+    background: linear-gradient(90deg, #ff8c00, #ff4500, #ff8c00);
+    background-size: 200% 100%;
+    animation: gradient-shift 2s linear infinite;
+    z-index: -1;
+    opacity: 0.6;
+  }
+}
+
+// New image class for main preview
+.thinking-overlay__image--new {
+  animation: main-image-appear 0.4s ease-out forwards !important;
 }
 
 // Accept/Reject action buttons
@@ -528,5 +675,94 @@
   }
   100% {
     opacity: 0.7;
+  }
+}
+
+// ============================================================================
+// New animations for image chooser drop-in effect
+// ============================================================================
+
+// Magical drop-in animation for thumbnails
+@keyframes thumbnail-drop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) translateY(-30px);
+    filter: brightness(2) blur(4px);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.15) translateY(0);
+    filter: brightness(1.5) blur(0);
+  }
+  50% {
+    transform: scale(0.95);
+    filter: brightness(1.2);
+  }
+  70% {
+    transform: scale(1.05);
+    filter: brightness(1);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+// Sparkle effect that fades out
+@keyframes thumbnail-sparkle {
+  0% {
+    opacity: 0.8;
+    transform: scale(1.2);
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+// Spinner rotation
+@keyframes spinner-rotate {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+// Pulsing dot indicator
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.8);
+  }
+}
+
+// Gradient shift for collecting border
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+// Main image appear animation
+@keyframes main-image-appear {
+  0% {
+    opacity: 0;
+    filter: brightness(1.5) saturate(1.2);
+  }
+  100% {
+    opacity: 1;
+    filter: brightness(1) saturate(1);
   }
 }

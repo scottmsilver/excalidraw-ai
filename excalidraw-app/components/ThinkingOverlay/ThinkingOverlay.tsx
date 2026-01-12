@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 
 import "./ThinkingOverlay.scss";
 
@@ -8,6 +8,14 @@ export type ThinkingStatus =
   | "reviewing"
   | "accepted"
   | "rejected";
+
+/**
+ * Track newly arrived images for drop-in animation
+ */
+interface NewImageState {
+  index: number;
+  timestamp: number;
+}
 
 /**
  * Canvas bounds for coordinate transformation.
@@ -95,18 +103,55 @@ export const ThinkingOverlay: React.FC<ThinkingOverlayProps> = ({
   const [showFlash, setShowFlash] = useState(false);
   const prevStatusRef = useRef<ThinkingStatus>("idle");
 
-  // Track which iteration image is being viewed in review mode
+  // Track which iteration image is being viewed
   const [reviewIndex, setReviewIndex] = useState(0);
 
   // Opacity for AI result overlay (0 = show original, 100 = show AI result)
   const [aiOpacity, setAiOpacity] = useState(100);
 
-  // Reset review index when entering review mode
+  // Track newly arrived images for drop-in animation
+  const [newImages, setNewImages] = useState<NewImageState[]>([]);
+  const prevImageCountRef = useRef(0);
+
+  // Show chooser panel when we have images (during thinking or reviewing)
+  const showChooserPanel = iterationImages.length > 0 && (status === "thinking" || status === "reviewing");
+
+  // Track new images arriving and auto-select the newest one
   useEffect(() => {
-    if (status === "reviewing" && iterationImages.length > 0) {
-      setReviewIndex(iterationImages.length - 1); // Start at most recent
+    const prevCount = prevImageCountRef.current;
+    const newCount = iterationImages.length;
+
+    if (newCount > prevCount) {
+      // New image(s) arrived - mark them for animation
+      const newImageIndices: NewImageState[] = [];
+      for (let i = prevCount; i < newCount; i++) {
+        newImageIndices.push({ index: i, timestamp: Date.now() });
+      }
+      setNewImages(prev => [...prev, ...newImageIndices]);
+
+      // Auto-select the newest image
+      setReviewIndex(newCount - 1);
+
+      // Clear animation state after animation completes
+      const timer = setTimeout(() => {
+        setNewImages(prev => prev.filter(img => Date.now() - img.timestamp < 800));
+      }, 800);
+
+      prevImageCountRef.current = newCount;
+      return () => clearTimeout(timer);
     }
-  }, [status, iterationImages.length]);
+
+    prevImageCountRef.current = newCount;
+  }, [iterationImages.length]);
+
+  // Reset state when status changes to idle
+  useEffect(() => {
+    if (status === "idle") {
+      setNewImages([]);
+      prevImageCountRef.current = 0;
+      setReviewIndex(0);
+    }
+  }, [status]);
 
   // Trigger flash when transitioning to thinking
   useEffect(() => {
@@ -269,117 +314,88 @@ export const ThinkingOverlay: React.FC<ThinkingOverlayProps> = ({
         )}
       </div>
 
-      {/* Review mode images - rendered OUTSIDE main container for proper z-index layering */}
-      {status === "reviewing" &&
-        iterationImages.length > 0 &&
-        renderReviewImages && (
-          <>
-            {/* Original marked-up image (z-index 10, below pins) */}
-            {originalImage && (
-              <img
-                src={originalImage}
-                alt="Original with markups"
-                className={`thinking-overlay__image thinking-overlay__image--reviewing thinking-overlay__image--original${
-                  imageStyle ? " thinking-overlay__image--positioned" : ""
-                }`}
-                style={{
-                  ...imageStyle,
-                  zIndex: 10,
-                }}
-              />
-            )}
-
-            {/* AI result image (z-index 20, above pins, with controlled opacity) */}
+      {/* Image chooser panel - shown during both thinking (with images) and reviewing */}
+      {showChooserPanel && renderReviewImages && (
+        <>
+          {/* Original marked-up image (z-index 10, below AI result) */}
+          {originalImage && (
             <img
-              src={iterationImages[reviewIndex]}
-              alt={`AI result ${reviewIndex + 1} of ${iterationImages.length}`}
-              className={`thinking-overlay__image thinking-overlay__image--reviewing thinking-overlay__image--ai-result${
+              src={originalImage}
+              alt="Original with markups"
+              className={`thinking-overlay__image thinking-overlay__image--reviewing thinking-overlay__image--original${
                 imageStyle ? " thinking-overlay__image--positioned" : ""
               }`}
               style={{
                 ...imageStyle,
-                zIndex: 20,
-                opacity: aiOpacity / 100,
+                zIndex: 10,
               }}
             />
+          )}
 
-            {/* Review controls (z-index 100) */}
-            <div className="thinking-overlay__review-panel">
-              {/* Opacity comparison slider */}
-              <div className="thinking-overlay__comparison">
-                <span className="thinking-overlay__comparison-label">
-                  {originalImage ? "Original" : "(no original)"}
-                </span>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={aiOpacity}
-                  onChange={(e) => setAiOpacity(Number(e.target.value))}
-                  className="thinking-overlay__comparison-slider"
-                  aria-label="Compare original and AI result"
-                />
-                <span className="thinking-overlay__comparison-label">
-                  AI {aiOpacity}%
-                </span>
-              </div>
+          {/* AI result image (z-index 20, with controlled opacity) */}
+          <img
+            src={iterationImages[reviewIndex]}
+            alt={`AI result ${reviewIndex + 1} of ${iterationImages.length}`}
+            className={`thinking-overlay__image thinking-overlay__image--reviewing thinking-overlay__image--ai-result${
+              imageStyle ? " thinking-overlay__image--positioned" : ""
+            }${newImages.some(img => img.index === reviewIndex) ? " thinking-overlay__image--new" : ""}`}
+            style={{
+              ...imageStyle,
+              zIndex: 20,
+              opacity: aiOpacity / 100,
+            }}
+          />
 
-              {/* Navigation controls - only show if multiple iterations */}
-              {iterationImages.length > 1 && (
-                <div className="thinking-overlay__navigation">
+          {/* Chooser panel (z-index 100) */}
+          <div className={`thinking-overlay__review-panel${status === "thinking" ? " thinking-overlay__review-panel--collecting" : ""}`}>
+            {/* Thumbnail strip - shows all iteration images */}
+            <div className="thinking-overlay__thumbnails">
+              {iterationImages.map((imgSrc, index) => {
+                const isNew = newImages.some(img => img.index === index);
+                const isSelected = index === reviewIndex;
+                return (
                   <button
+                    key={index}
                     type="button"
-                    className="thinking-overlay__nav-button"
-                    onClick={() =>
-                      setReviewIndex((i) =>
-                        i > 0 ? i - 1 : iterationImages.length - 1,
-                      )
-                    }
-                    aria-label="Previous iteration"
+                    className={`thinking-overlay__thumbnail${isSelected ? " thinking-overlay__thumbnail--selected" : ""}${isNew ? " thinking-overlay__thumbnail--new" : ""}`}
+                    onClick={() => setReviewIndex(index)}
+                    aria-label={`View iteration ${index + 1}`}
+                    aria-pressed={isSelected}
                   >
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <polyline points="15 18 9 12 15 6" />
-                    </svg>
+                    <img src={imgSrc} alt={`Iteration ${index + 1}`} />
+                    {isNew && <div className="thinking-overlay__thumbnail-sparkle" />}
                   </button>
-                  <span className="thinking-overlay__nav-indicator">
-                    {reviewIndex + 1} / {iterationImages.length}
-                  </span>
-                  <button
-                    type="button"
-                    className="thinking-overlay__nav-button"
-                    onClick={() =>
-                      setReviewIndex((i) =>
-                        i < iterationImages.length - 1 ? i + 1 : 0,
-                      )
-                    }
-                    aria-label="Next iteration"
-                  >
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <polyline points="9 18 15 12 9 6" />
-                    </svg>
-                  </button>
+                );
+              })}
+              {/* Placeholder for incoming images during thinking */}
+              {status === "thinking" && (
+                <div className="thinking-overlay__thumbnail thinking-overlay__thumbnail--placeholder">
+                  <div className="thinking-overlay__thumbnail-spinner" />
                 </div>
               )}
+            </div>
 
-              {/* Accept/Reject buttons */}
+            {/* Opacity comparison slider */}
+            <div className="thinking-overlay__comparison">
+              <span className="thinking-overlay__comparison-label">
+                {originalImage ? "Original" : "(no original)"}
+              </span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={aiOpacity}
+                onChange={(e) => setAiOpacity(Number(e.target.value))}
+                className="thinking-overlay__comparison-slider"
+                aria-label="Compare original and AI result"
+              />
+              <span className="thinking-overlay__comparison-label">
+                AI
+              </span>
+            </div>
+
+            {/* Accept/Reject buttons - only in reviewing mode */}
+            {status === "reviewing" && (
               <div className="thinking-overlay__actions">
                 {onReject && (
                   <button
@@ -427,9 +443,17 @@ export const ThinkingOverlay: React.FC<ThinkingOverlayProps> = ({
                   </button>
                 )}
               </div>
-            </div>
-          </>
-        )}
+            )}
+
+            {/* Processing indicator during thinking */}
+            {status === "thinking" && (
+              <div className="thinking-overlay__processing-hint">
+                Generating more options...
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </>
   );
 };
