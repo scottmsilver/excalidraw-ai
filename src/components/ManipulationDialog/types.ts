@@ -6,7 +6,11 @@
  */
 
 import type { ReferencePoint } from "../ReferencePoints";
-import type { AIProgressEvent, AIProgressStep, ShapeMetadata } from "../../services/types";
+import type {
+  AIProgressEvent,
+  AIProgressStep,
+  ShapeMetadata,
+} from "../../services/types";
 import type { ExportBounds } from "../../utils/coordinateTransforms";
 
 // Re-export ExportBounds for consumers

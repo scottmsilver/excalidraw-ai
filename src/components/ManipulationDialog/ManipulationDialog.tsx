@@ -421,7 +421,9 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
   // Reference points are optional - user can provide context via drawn annotations or just text
   // cleanImageBlob is required (the image to edit), annotatedImageBlob is optional (for AI guidance)
   const canSubmit =
-    !state.isLoading && state.command.trim().length > 0 && cleanImageBlob !== null;
+    !state.isLoading &&
+    state.command.trim().length > 0 &&
+    cleanImageBlob !== null;
 
   /**
    * Handle progress events from SSE stream

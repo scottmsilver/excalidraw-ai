@@ -1,0 +1,252 @@
+@import "../css/variables.module.scss";
+
+.PDFPageSelector__backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.PDFPageSelector__modal {
+  background-color: var(--island-bg-color, #fff);
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.PDFPageSelector__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--dialog-border-color, #e5e5e5);
+}
+
+.PDFPageSelector__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary-color, #1b1b1f);
+}
+
+.PDFPageSelector__closeButton {
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  background: transparent;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--text-primary-color, #1b1b1f);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.25rem;
+  opacity: 0.7;
+
+  &:hover:not(:disabled) {
+    opacity: 1;
+    background-color: var(--color-gray-20, #eee);
+  }
+
+  &:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+}
+
+.PDFPageSelector__content {
+  padding: 1.25rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  text-align: center;
+}
+
+.PDFPageSelector__description {
+  margin: 0;
+  color: var(--color-gray-60, #666);
+  font-size: 0.875rem;
+}
+
+.PDFPageSelector__preview {
+  border: 1px solid var(--dialog-border-color, #e5e5e5);
+  border-radius: 0.5rem;
+  background-color: var(--color-gray-10, #f5f5f5);
+  min-height: 300px;
+  max-height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.PDFPageSelector__previewImage {
+  max-width: 100%;
+  max-height: 400px;
+  height: auto;
+  display: block;
+}
+
+.PDFPageSelector__previewLoading,
+.PDFPageSelector__previewPlaceholder {
+  color: var(--color-gray-50, #999);
+  font-size: 0.875rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.PDFPageSelector__navigation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.PDFPageSelector__navButton {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--dialog-border-color, #e5e5e5);
+  border-radius: 0.25rem;
+  background-color: var(--island-bg-color, #fff);
+  color: var(--text-primary-color, #1b1b1f);
+  font-size: 1.25rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover:not(:disabled) {
+    background-color: var(--color-gray-20, #eee);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.PDFPageSelector__pageInfo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text-primary-color, #1b1b1f);
+}
+
+.PDFPageSelector__pageInput {
+  width: 3.5rem;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--dialog-border-color, #e5e5e5);
+  border-radius: 0.25rem;
+  text-align: center;
+  font-size: 0.875rem;
+  background-color: var(--island-bg-color, #fff);
+  color: var(--text-primary-color, #1b1b1f);
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary, #6965db);
+  }
+}
+
+.PDFPageSelector__quality {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text-primary-color, #1b1b1f);
+}
+
+.PDFPageSelector__qualitySelect {
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--dialog-border-color, #e5e5e5);
+  border-radius: 0.25rem;
+  background-color: var(--island-bg-color, #fff);
+  color: var(--text-primary-color, #1b1b1f);
+  font-size: 0.875rem;
+  cursor: pointer;
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary, #6965db);
+  }
+}
+
+.PDFPageSelector__actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.PDFPageSelector__button {
+  padding: 0.625rem 1.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.PDFPageSelector__button--primary {
+  background-color: var(--color-primary, #6965db);
+  color: white;
+  border: none;
+
+  &:hover:not(:disabled) {
+    background-color: var(--color-primary-darker, #5753c9);
+  }
+}
+
+.PDFPageSelector__button--secondary {
+  background-color: transparent;
+  color: var(--text-primary-color, #1b1b1f);
+  border: 1px solid var(--dialog-border-color, #e5e5e5);
+
+  &:hover:not(:disabled) {
+    background-color: var(--color-gray-20, #eee);
+  }
+}
+
+.PDFPageSelector__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  gap: 1rem;
+  color: var(--text-primary-color, #1b1b1f);
+}
+
+.PDFPageSelector__error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+
+  p {
+    margin: 0;
+    color: var(--color-danger, #dc3545);
+  }
+}

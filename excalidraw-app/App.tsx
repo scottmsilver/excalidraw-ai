@@ -568,7 +568,8 @@ const AIManipulationUI: React.FC<{
 
         // Use SNAPSHOT elements for bounds calculation (not current elements which include annotations)
         // This ensures the AI result is positioned correctly based on the original content
-        const snapshotElements = elementsSnapshot as readonly ExcalidrawElement[];
+        const snapshotElements =
+          elementsSnapshot as readonly ExcalidrawElement[];
 
         let minX = Infinity;
         let minY = Infinity;
@@ -622,7 +623,13 @@ const AIManipulationUI: React.FC<{
       exitAIMode();
       closeDialog();
     },
-    [excalidrawAPI, elementsSnapshot, clearReferencePoints, exitAIMode, closeDialog],
+    [
+      excalidrawAPI,
+      elementsSnapshot,
+      clearReferencePoints,
+      exitAIMode,
+      closeDialog,
+    ],
   );
 
   // Handle accept - apply the selected iteration image
@@ -642,9 +649,7 @@ const AIManipulationUI: React.FC<{
     // Restore the scene to the snapshot (removes any annotations drawn during AI mode)
     const snapshotElements = elementsSnapshot as readonly ExcalidrawElement[];
     if (excalidrawAPI && snapshotElements.length > 0) {
-      const syncedElements = syncInvalidIndices([
-        ...snapshotElements,
-      ]);
+      const syncedElements = syncInvalidIndices([...snapshotElements]);
       excalidrawAPI.updateScene({
         elements: syncedElements,
       });
@@ -910,7 +915,8 @@ const AIToolbarButton: React.FC<{
 
       // Export CLEAN image (original elements only, no annotations)
       // Use snapshot elements if available, otherwise fall back to all elements
-      const cleanElementsToExport = cleanElements.length > 0 ? cleanElements : allElements;
+      const cleanElementsToExport =
+        cleanElements.length > 0 ? cleanElements : allElements;
       const cleanBlob = await exportToBlob({
         elements: cleanElementsToExport,
         appState: {

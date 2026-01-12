@@ -139,7 +139,11 @@ export interface AIManipulationContextValue {
    * @param annotatedBlob - Optional annotated canvas image as Blob (with annotations for AI guidance)
    * @returns Promise resolving to base64 image data URL
    */
-  executeEdit: (command: string, cleanBlob: Blob, annotatedBlob?: Blob) => Promise<string>;
+  executeEdit: (
+    command: string,
+    cleanBlob: Blob,
+    annotatedBlob?: Blob,
+  ) => Promise<string>;
   /** Reset AI edit state (clear error, progress, etc.) */
   resetEditState: () => void;
   /** Manually set processing state (for components that manage their own edit execution) */
@@ -316,7 +320,9 @@ export function AIManipulationProvider({
   }, []);
 
   // Elements snapshot - captures scene before annotations are added
-  const [elementsSnapshot, setElementsSnapshotState] = useState<readonly unknown[]>([]);
+  const [elementsSnapshot, setElementsSnapshotState] = useState<
+    readonly unknown[]
+  >([]);
 
   const setElementsSnapshot = useCallback((elements: readonly unknown[]) => {
     setElementsSnapshotState(elements);
@@ -324,7 +330,11 @@ export function AIManipulationProvider({
 
   // Execute edit - converts blob and calls agentic service
   const executeEdit = useCallback(
-    async (command: string, cleanBlob: Blob, annotatedBlob?: Blob): Promise<string> => {
+    async (
+      command: string,
+      cleanBlob: Blob,
+      annotatedBlob?: Blob,
+    ): Promise<string> => {
       const result = await executeAgenticEdit({
         cleanImageBlob: cleanBlob,
         annotatedImageBlob: annotatedBlob,

@@ -23,7 +23,11 @@
 
 import { toApiReferencePoints } from "../components/ReferencePoints";
 
-import { agenticEdit, type AIProgressEvent, type ShapeMetadata } from "./apiClient";
+import {
+  agenticEdit,
+  type AIProgressEvent,
+  type ShapeMetadata,
+} from "./apiClient";
 
 import type { ReferencePoint } from "../components/ReferencePoints";
 

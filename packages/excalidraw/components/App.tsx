@@ -36,6 +36,7 @@ import {
   EVENT,
   FRAME_STYLE,
   IMAGE_MIME_TYPES,
+  HEIC_MIME_TYPES,
   IMAGE_RENDER_TIMEOUT,
   LINE_CONFIRM_THRESHOLD,
   MAX_ALLOWED_FILE_BYTES,
@@ -376,6 +377,9 @@ import {
 } from "../data/blob";
 
 import { fileOpen } from "../data/filesystem";
+import { isHeicFile, convertHeicToJpeg } from "../data/heicConverter";
+import { isPdfFile } from "../data/pdfUtils";
+
 import {
   showHyperlinkTooltip,
   hideHyperlinkToolip,
@@ -417,6 +421,9 @@ import { LassoTrail } from "../lasso";
 import { EraserTrail } from "../eraser";
 
 import { getShortcutKey } from "../shortcut";
+
+import { PDFPageSelector } from "./PDFPageSelector";
+import { ConvertingOverlay } from "./ConvertingOverlay";
 
 import ConvertElementTypePopup, {
   getConversionTypeFromElements,
@@ -639,6 +646,11 @@ class App extends React.Component<AppProps, AppState> {
   bindModeHandler: ReturnType<typeof setTimeout> | null = null;
 
   hitLinkElement?: NonDeletedExcalidrawElement;
+  // PDF import state
+  private pendingPdfFile: File | null = null;
+  private pendingPdfInsertPosition: { x: number; y: number } | null = null;
+  // HEIC conversion state - tracks elements being converted
+  private convertingElementIds: Set<string> = new Set();
   lastPointerDownEvent: React.PointerEvent<HTMLElement> | null = null;
   lastPointerUpEvent: React.PointerEvent<HTMLElement> | PointerEvent | null =
     null;
@@ -2194,6 +2206,20 @@ class App extends React.Component<AppProps, AppState> {
                         )}
                       </ExcalidrawActionManagerContext.Provider>
                       {this.renderEmbeddables()}
+                      {this.pendingPdfFile && (
+                        <PDFPageSelector
+                          file={this.pendingPdfFile}
+                          onPageSelected={this.handlePdfPageSelected}
+                          onCancel={this.handlePdfCancel}
+                        />
+                      )}
+                      {this.convertingElementIds.size > 0 && (
+                        <ConvertingOverlay
+                          convertingElementIds={this.convertingElementIds}
+                          elementsMap={this.scene.getNonDeletedElementsMap()}
+                          appState={this.state}
+                        />
+                      )}
                     </ExcalidrawElementsContext.Provider>
                   </ExcalidrawAppStateContext.Provider>
                 </ExcalidrawSetAppStateContext.Provider>
@@ -10950,15 +10976,132 @@ class App extends React.Component<AppProps, AppState> {
         this.state,
       );
 
-      const imageFiles = await fileOpen({
+      // Build extensions list including HEIC and PDF
+      // These must be valid keys in MIME_TYPES
+      const extensions = [
+        ...Object.keys(IMAGE_MIME_TYPES),
+        ...Object.keys(HEIC_MIME_TYPES),
+        "pdf",
+      ] as (
+        | keyof typeof IMAGE_MIME_TYPES
+        | keyof typeof HEIC_MIME_TYPES
+        | "pdf"
+      )[];
+
+      const selectedFiles = await fileOpen({
         description: "Image",
-        extensions: Object.keys(
-          IMAGE_MIME_TYPES,
-        ) as (keyof typeof IMAGE_MIME_TYPES)[],
+        extensions,
         multiple: true,
       });
 
-      this.insertImages(imageFiles, x, y);
+      // Separate files by type
+      const pdfFiles: File[] = [];
+      const heicFiles: File[] = [];
+      const regularFiles: File[] = [];
+
+      for (const file of selectedFiles) {
+        if (isPdfFile(file)) {
+          pdfFiles.push(file);
+        } else if (isHeicFile(file)) {
+          heicFiles.push(file);
+        } else {
+          regularFiles.push(file);
+        }
+      }
+
+      // Insert regular images immediately (no conversion needed)
+      if (regularFiles.length > 0) {
+        this.insertImages(regularFiles, x, y);
+      }
+
+      // Handle HEIC files - show overlay while converting
+      if (heicFiles.length > 0) {
+        const heicX = regularFiles.length > 0 ? x + 100 : x;
+
+        // Create placeholders and insert them
+        const gridPadding = 50 / this.state.zoom.value;
+        const placeholders = positionElementsOnGrid(
+          heicFiles.map(() =>
+            this.newImagePlaceholder({ sceneX: heicX, sceneY: y }),
+          ),
+          heicX,
+          y,
+          gridPadding,
+        );
+
+        // Insert placeholder elements and track them as converting
+        placeholders.forEach((el) => {
+          this.scene.insertElement(el);
+          this.convertingElementIds.add(el.id);
+        });
+
+        // Force render to show placeholders with overlay
+        this.scene.triggerUpdate();
+        this.forceUpdate();
+
+        // Convert HEIC files and replace placeholders one by one
+        for (let i = 0; i < heicFiles.length; i++) {
+          const file = heicFiles[i];
+          const placeholder = placeholders[i];
+
+          try {
+            const convertedFile = await convertHeicToJpeg(file);
+
+            // Initialize the real image in place of the placeholder
+            const realImage = await this.initializeImage(
+              placeholder,
+              await normalizeFile(convertedFile),
+            );
+
+            // Remove from converting set
+            this.convertingElementIds.delete(placeholder.id);
+
+            // Update the scene with the real image
+            const nextElements = this.scene
+              .getElementsIncludingDeleted()
+              .map((el) => (el.id === placeholder.id ? realImage : el));
+
+            this.updateScene({
+              elements: nextElements,
+              captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+            });
+            this.forceUpdate();
+          } catch (error) {
+            console.error("Failed to convert HEIC file:", error);
+            // Remove from converting set
+            this.convertingElementIds.delete(placeholder.id);
+            // Remove failed placeholder
+            const nextElements = this.scene
+              .getElementsIncludingDeleted()
+              .map((el) =>
+                el.id === placeholder.id
+                  ? newElementWith(el, { isDeleted: true })
+                  : el,
+              );
+            this.updateScene({
+              elements: nextElements,
+              captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+            });
+            this.forceUpdate();
+
+            this.setState({
+              errorMessage:
+                error instanceof Error
+                  ? error.message
+                  : `Failed to convert HEIC image: ${file.name}`,
+            });
+          }
+        }
+      }
+
+      // Handle PDF files - show selector for the first one
+      // (multiple PDFs handled one at a time)
+      if (pdfFiles.length > 0) {
+        this.pendingPdfFile = pdfFiles[0];
+        this.pendingPdfInsertPosition = { x, y };
+        // Force re-render to show PDF selector
+        this.forceUpdate();
+      }
     } catch (error: any) {
       if (error.name !== "AbortError") {
         console.error(error);
@@ -10977,6 +11120,25 @@ class App extends React.Component<AppProps, AppState> {
         },
       );
     }
+  };
+
+  private handlePdfPageSelected = (imageFile: File) => {
+    if (this.pendingPdfInsertPosition) {
+      this.insertImages(
+        [imageFile],
+        this.pendingPdfInsertPosition.x,
+        this.pendingPdfInsertPosition.y,
+      );
+    }
+    this.pendingPdfFile = null;
+    this.pendingPdfInsertPosition = null;
+    this.forceUpdate();
+  };
+
+  private handlePdfCancel = () => {
+    this.pendingPdfFile = null;
+    this.pendingPdfInsertPosition = null;
+    this.forceUpdate();
   };
 
   private getImageNaturalDimensions = (
@@ -11240,12 +11402,125 @@ class App extends React.Component<AppProps, AppState> {
       }
     }
 
-    const imageFiles = fileItems
+    // Collect all files that could be images (including HEIC and PDF)
+    const allFiles = fileItems
       .map((data) => data.file)
-      .filter((file) => isSupportedImageFile(file));
+      .filter((file): file is File => file !== null);
 
-    if (imageFiles.length > 0 && this.isToolSupported("image")) {
-      return this.insertImages(imageFiles, sceneX, sceneY);
+    // Separate files by type
+    const regularImageFiles: File[] = [];
+    const heicFiles: File[] = [];
+    const pdfFiles: File[] = [];
+
+    for (const file of allFiles) {
+      if (isSupportedImageFile(file)) {
+        regularImageFiles.push(file);
+      } else if (isHeicFile(file)) {
+        heicFiles.push(file);
+      } else if (isPdfFile(file)) {
+        pdfFiles.push(file);
+      }
+    }
+
+    // Insert regular images immediately
+    if (regularImageFiles.length > 0 && this.isToolSupported("image")) {
+      this.insertImages(regularImageFiles, sceneX, sceneY);
+    }
+
+    // Handle HEIC files - show overlay while converting
+    if (heicFiles.length > 0 && this.isToolSupported("image")) {
+      const heicX = regularImageFiles.length > 0 ? sceneX + 100 : sceneX;
+
+      // Create placeholders and insert them
+      const gridPadding = 50 / this.state.zoom.value;
+      const placeholders = positionElementsOnGrid(
+        heicFiles.map(() =>
+          this.newImagePlaceholder({ sceneX: heicX, sceneY }),
+        ),
+        heicX,
+        sceneY,
+        gridPadding,
+      );
+
+      // Insert placeholder elements and track them as converting
+      placeholders.forEach((el) => {
+        this.scene.insertElement(el);
+        this.convertingElementIds.add(el.id);
+      });
+
+      // Force render to show placeholders with overlay
+      this.scene.triggerUpdate();
+      this.forceUpdate();
+
+      // Convert HEIC files and replace placeholders one by one
+      for (let i = 0; i < heicFiles.length; i++) {
+        const file = heicFiles[i];
+        const placeholder = placeholders[i];
+
+        try {
+          const convertedFile = await convertHeicToJpeg(file);
+
+          // Initialize the real image in place of the placeholder
+          const realImage = await this.initializeImage(
+            placeholder,
+            await normalizeFile(convertedFile),
+          );
+
+          // Remove from converting set
+          this.convertingElementIds.delete(placeholder.id);
+
+          // Update the scene with the real image
+          const nextElements = this.scene
+            .getElementsIncludingDeleted()
+            .map((el) => (el.id === placeholder.id ? realImage : el));
+
+          this.updateScene({
+            elements: nextElements,
+            captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+          });
+          this.forceUpdate();
+        } catch (error) {
+          console.error("Failed to convert HEIC file:", error);
+          // Remove from converting set
+          this.convertingElementIds.delete(placeholder.id);
+          // Remove failed placeholder
+          const nextElements = this.scene
+            .getElementsIncludingDeleted()
+            .map((el) =>
+              el.id === placeholder.id
+                ? newElementWith(el, { isDeleted: true })
+                : el,
+            );
+          this.updateScene({
+            elements: nextElements,
+            captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+          });
+          this.forceUpdate();
+
+          this.setState({
+            errorMessage:
+              error instanceof Error
+                ? error.message
+                : "Failed to convert HEIC image",
+          });
+        }
+      }
+    }
+
+    // Check if we handled any images
+    const handledImages = regularImageFiles.length > 0 || heicFiles.length > 0;
+
+    // Handle PDF files - show selector for the first one
+    if (pdfFiles.length > 0 && this.isToolSupported("image")) {
+      this.pendingPdfFile = pdfFiles[0];
+      this.pendingPdfInsertPosition = { x: sceneX, y: sceneY };
+      this.forceUpdate();
+      return;
+    }
+
+    // If we handled any images, return early
+    if (handledImages) {
+      return;
     }
     const excalidrawLibrary_ids = dataTransferList.getData(
       MIME_TYPES.excalidrawlibIds,
