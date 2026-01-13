@@ -771,9 +771,18 @@ class App extends React.Component<AppProps, AppState> {
         getSceneElementsIncludingDeleted: this.getSceneElementsIncludingDeleted,
         getSceneElementsMapIncludingDeleted:
           this.getSceneElementsMapIncludingDeleted,
-        history: {
-          clear: this.resetHistory,
-        },
+        history: Object.defineProperty(
+          {
+            clear: this.resetHistory,
+            pause: () => this.history.pause(),
+            resume: () => this.history.resume(),
+          },
+          "isPaused",
+          {
+            get: () => this.history.isPaused,
+            enumerable: true,
+          },
+        ) as ExcalidrawImperativeAPI["history"],
         scrollToContent: this.scrollToContent,
         getSceneElements: this.getSceneElements,
         getAppState: () => this.state,

@@ -844,6 +844,20 @@ export interface ExcalidrawImperativeAPI {
   >["getSceneElementsMapIncludingDeleted"];
   history: {
     clear: InstanceType<typeof App>["resetHistory"];
+    /**
+     * Pause history recording. While paused, no changes will be
+     * added to the undo stack. Useful for isolated editing modes
+     * like AI manipulation where you want a separate undo context.
+     */
+    pause: () => void;
+    /**
+     * Resume history recording after being paused.
+     */
+    resume: () => void;
+    /**
+     * Whether history recording is currently paused.
+     */
+    readonly isPaused: boolean;
   };
   getSceneElements: InstanceType<typeof App>["getSceneElements"];
   getAppState: () => InstanceType<typeof App>["state"];

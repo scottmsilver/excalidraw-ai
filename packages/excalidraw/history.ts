@@ -95,12 +95,38 @@ export class History {
   public readonly undoStack: HistoryDelta[] = [];
   public readonly redoStack: HistoryDelta[] = [];
 
+  /**
+   * When paused, history recording is suspended.
+   * Use for isolated editing contexts (e.g., AI manipulation mode)
+   * where changes should not be recorded to the main undo stack.
+   */
+  private _paused = false;
+
   public get isUndoStackEmpty() {
     return this.undoStack.length === 0;
   }
 
   public get isRedoStackEmpty() {
     return this.redoStack.length === 0;
+  }
+
+  public get isPaused() {
+    return this._paused;
+  }
+
+  /**
+   * Pause history recording. While paused, no changes will be
+   * added to the undo stack. Useful for isolated editing modes.
+   */
+  public pause() {
+    this._paused = true;
+  }
+
+  /**
+   * Resume history recording after being paused.
+   */
+  public resume() {
+    this._paused = false;
   }
 
   constructor(private readonly store: Store) {}
@@ -115,7 +141,7 @@ export class History {
    * Do not re-record history entries, which were already pushed to undo / redo stack, as part of history action.
    */
   public record(delta: StoreDelta) {
-    if (delta.isEmpty() || delta instanceof HistoryDelta) {
+    if (this._paused || delta.isEmpty() || delta instanceof HistoryDelta) {
       return;
     }
 

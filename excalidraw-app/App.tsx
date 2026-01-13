@@ -546,6 +546,9 @@ const AIManipulationUI: React.FC<{
       }
 
       try {
+        // Resume history recording so the final change is recorded
+        excalidrawAPI.history.resume();
+
         // Ensure imageData is a data URL
         const dataURL = (
           imageData.startsWith("data:")
@@ -605,23 +608,38 @@ const AIManipulationUI: React.FC<{
           status: "saved",
         });
 
-        // Clear scene and add only the AI result image
-        // This removes the original elements AND any annotations drawn during AI mode
-        const newElements = [imageElement];
-
-        // Fix fractional indices (excalidraw requires proper ordering indices)
-        const syncedElements = syncInvalidIndices(newElements);
-
+        // Step 1: Restore original elements (without recording to history)
+        // This removes any annotations drawn during AI mode
+        const restoredElements = syncInvalidIndices([...snapshotElements]);
         excalidrawAPI.updateScene({
-          elements: syncedElements,
+          elements: restoredElements,
+          captureUpdate: CaptureUpdateAction.NEVER,
         });
+
+        // Step 2: Add AI image on top of original elements (recorded as single undo entry)
+        // Use setTimeout to ensure the restore commits before we add the AI image
+        // This ensures the undo delta is calculated from snapshot → snapshot+AI
+        // rather than from annotations → snapshot+AI
+        setTimeout(() => {
+          const finalElements = syncInvalidIndices([
+            ...snapshotElements,
+            imageElement,
+          ]);
+          excalidrawAPI.updateScene({
+            elements: finalElements,
+            captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+          });
+
+          clearReferencePoints();
+          exitAIMode();
+          closeDialog();
+        }, 0);
       } catch (error) {
         console.error("Failed to add AI result to canvas:", error);
+        clearReferencePoints();
+        exitAIMode();
+        closeDialog();
       }
-
-      clearReferencePoints();
-      exitAIMode();
-      closeDialog();
     },
     [
       excalidrawAPI,
@@ -646,12 +664,18 @@ const AIManipulationUI: React.FC<{
 
   // Handle reject - restore snapshot (removes annotations) and cleanup
   const handleReject = React.useCallback(() => {
+    // Resume history recording before restoring
+    // This ensures the restore itself is not recorded (we use updateScene which defaults to EVENTUALLY)
+    excalidrawAPI?.history.resume();
+
     // Restore the scene to the snapshot (removes any annotations drawn during AI mode)
     const snapshotElements = elementsSnapshot as readonly ExcalidrawElement[];
     if (excalidrawAPI && snapshotElements.length > 0) {
       const syncedElements = syncInvalidIndices([...snapshotElements]);
+      // Use NEVER to avoid recording the restore in undo stack
       excalidrawAPI.updateScene({
         elements: syncedElements,
+        captureUpdate: CaptureUpdateAction.NEVER,
       });
     }
     rejectResult();
@@ -966,12 +990,29 @@ const AIToolbarButton: React.FC<{
   // Toggle AI mode
   const handleToggle = useCallback(() => {
     if (isAIModeActive) {
+      // Exiting AI mode via toggle (not accept/reject)
+      // Resume history recording
+      excalidrawAPI?.history.resume();
+
+      // Restore scene to pre-AI-mode state (discard any annotations drawn)
+      const snapshotElements = elementsSnapshot as readonly ExcalidrawElement[];
+      if (excalidrawAPI && snapshotElements.length > 0) {
+        const syncedElements = syncInvalidIndices([...snapshotElements]);
+        excalidrawAPI.updateScene({
+          elements: syncedElements,
+          captureUpdate: CaptureUpdateAction.NEVER,
+        });
+      }
+
       clearReferencePoints();
       exitAIMode();
     } else {
+      // Entering AI mode - pause history recording
+      // All changes during AI mode go to an isolated context
+      excalidrawAPI?.history.pause();
       enterAIMode();
     }
-  }, [isAIModeActive, clearReferencePoints, exitAIMode, enterAIMode]);
+  }, [isAIModeActive, excalidrawAPI, elementsSnapshot, clearReferencePoints, exitAIMode, enterAIMode]);
 
   // Allow execution when AI mode is active - user can provide context via:
   // - Reference points (Shift+Click markers)
@@ -1166,6 +1207,11 @@ const ExcalidrawWrapper = () => {
         delete window.visualDebug;
       }
       forceRefresh((prev) => !prev);
+
+      // Expose excalidrawAPI for debugging
+      if (excalidrawAPI) {
+        (window as any).excalidrawAPI = excalidrawAPI;
+      }
     }
   }, [excalidrawAPI]);
 
