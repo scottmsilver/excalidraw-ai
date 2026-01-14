@@ -101,6 +101,7 @@ import { ManipulationDialog } from "../src/components/ManipulationDialog";
 import { extractShapesFromElements } from "../src/utils/shapeExtractor";
 
 import { ThinkingOverlay } from "./components/ThinkingOverlay";
+import { CaptureToolbarContent } from "./capture";
 
 import CustomStats from "./CustomStats";
 import {
@@ -1945,6 +1946,9 @@ const ExcalidrawWrapper = () => {
 
         {/* AI Edit button injected into toolbar via tunnel */}
         <AIToolbarTunnelContent excalidrawAPI={excalidrawAPI} />
+
+        {/* Capture tool button injected into toolbar via tunnel */}
+        <CaptureToolbarContent excalidrawAPI={excalidrawAPI} />
 
         {/* AI Manipulation UI - Reference Points Overlay, Shift+Click Handler & Dialog */}
         <AIManipulationUI excalidrawAPI={excalidrawAPI} />
