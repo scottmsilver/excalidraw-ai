@@ -858,6 +858,24 @@ export interface ExcalidrawImperativeAPI {
      * Whether history recording is currently paused.
      */
     readonly isPaused: boolean;
+    /**
+     * Override the reported stack empty states and undo/redo behavior.
+     * Use for external undo systems (e.g., AI mode) to control button UI and actions.
+     * @param undoEmpty - Whether to report undo stack as empty
+     * @param redoEmpty - Whether to report redo stack as empty
+     * @param onUndo - Optional callback to call instead of normal undo
+     * @param onRedo - Optional callback to call instead of normal redo
+     */
+    overrideState: (
+      undoEmpty: boolean,
+      redoEmpty: boolean,
+      onUndo?: () => void,
+      onRedo?: () => void,
+    ) => void;
+    /**
+     * Clear override state, returning to normal stack-based reporting.
+     */
+    clearOverride: () => void;
   };
   getSceneElements: InstanceType<typeof App>["getSceneElements"];
   getAppState: () => InstanceType<typeof App>["state"];

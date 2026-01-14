@@ -36,6 +36,7 @@ import React, {
   useContext,
   useState,
   useCallback,
+  useRef,
   type ReactNode,
 } from "react";
 
@@ -158,6 +159,22 @@ export interface AIManipulationContextValue {
   acceptResult: (index: number) => void;
   /** Reject the AI result and cancel */
   rejectResult: () => void;
+
+  // AI Mode Undo Stack
+  /** Whether AI mode undo is available */
+  canAIUndo: boolean;
+  /** Whether AI mode redo is available */
+  canAIRedo: boolean;
+  /** Initialize AI undo tracking with baseline state (called when entering AI mode) */
+  initializeAIUndoState: (elements: readonly unknown[]) => void;
+  /** Push current elements to AI undo stack (called when elements change in AI mode) */
+  pushAIUndoEntry: (elements: readonly unknown[]) => void;
+  /** Undo within AI mode - returns elements to restore, or null if nothing to undo */
+  aiUndo: () => readonly unknown[] | null;
+  /** Redo within AI mode - returns elements to restore, or null if nothing to redo */
+  aiRedo: () => readonly unknown[] | null;
+  /** Clear AI undo/redo stacks (called when exiting AI mode) */
+  clearAIUndoStack: () => void;
 }
 
 // =============================================================================
@@ -328,6 +345,107 @@ export function AIManipulationProvider({
     setElementsSnapshotState(elements);
   }, []);
 
+  // AI Mode Undo Stack - using refs to avoid re-render loops
+  // The onChange callback fires frequently, so we use refs to prevent infinite loops
+  const aiUndoStackRef = useRef<Array<readonly unknown[]>>([]);
+  const aiRedoStackRef = useRef<Array<readonly unknown[]>>([]);
+  const currentAIElementsRef = useRef<readonly unknown[]>([]);
+  const isRestoringRef = useRef(false); // Flag to skip onChange during restore
+
+  // Force update trigger for canAIUndo/canAIRedo (only updates when explicitly needed)
+  const [, forceUpdate] = useState(0);
+
+  const canAIUndo = aiUndoStackRef.current.length > 0;
+  const canAIRedo = aiRedoStackRef.current.length > 0;
+
+  // Initialize AI undo tracking with the current state (called when entering AI mode)
+  // This sets the baseline state without pushing to the undo stack
+  const initializeAIUndoState = useCallback((elements: readonly unknown[]) => {
+    currentAIElementsRef.current = elements;
+    // Don't push to stack - this is the baseline state that we can't undo past
+  }, []);
+
+  // Push current elements to AI undo stack
+  const pushAIUndoEntry = useCallback((elements: readonly unknown[]) => {
+    // Skip if we're in the middle of restoring (undo/redo operation)
+    if (isRestoringRef.current) {
+      return;
+    }
+
+    const current = currentAIElementsRef.current;
+
+    // Check if elements actually changed
+    // Compare by length and element versions for a quick diff
+    let hasChanged = current.length !== elements.length;
+    if (!hasChanged && current.length > 0) {
+      // Quick version check - if any element has different version, it changed
+      const currentVersions = new Set(
+        (current as Array<{ id: string; version: number }>).map(
+          (el) => `${el.id}:${el.version}`
+        )
+      );
+      hasChanged = (elements as Array<{ id: string; version: number }>).some(
+        (el) => !currentVersions.has(`${el.id}:${el.version}`)
+      );
+    }
+
+    // Push previous state to undo stack when something changed
+    // Empty canvas is a valid state to undo to (allows undoing first drawn shape)
+    if (hasChanged) {
+      aiUndoStackRef.current = [...aiUndoStackRef.current, current];
+      aiRedoStackRef.current = []; // Clear redo stack on new change
+      forceUpdate((n) => n + 1); // Update canAIUndo/canAIRedo
+    }
+
+    currentAIElementsRef.current = elements;
+  }, []);
+
+  // Undo within AI mode
+  const aiUndo = useCallback((): readonly unknown[] | null => {
+    if (aiUndoStackRef.current.length === 0) {
+      return null;
+    }
+    isRestoringRef.current = true; // Set flag to skip onChange
+    const newStack = [...aiUndoStackRef.current];
+    const previousElements = newStack.pop()!;
+    aiUndoStackRef.current = newStack;
+    aiRedoStackRef.current = [...aiRedoStackRef.current, currentAIElementsRef.current];
+    currentAIElementsRef.current = previousElements;
+    forceUpdate((n) => n + 1); // Update canAIUndo/canAIRedo
+    // Reset flag after a tick to allow future onChange events
+    setTimeout(() => {
+      isRestoringRef.current = false;
+    }, 50);
+    return previousElements;
+  }, []);
+
+  // Redo within AI mode
+  const aiRedo = useCallback((): readonly unknown[] | null => {
+    if (aiRedoStackRef.current.length === 0) {
+      return null;
+    }
+    isRestoringRef.current = true; // Set flag to skip onChange
+    const newStack = [...aiRedoStackRef.current];
+    const nextElements = newStack.pop()!;
+    aiRedoStackRef.current = newStack;
+    aiUndoStackRef.current = [...aiUndoStackRef.current, currentAIElementsRef.current];
+    currentAIElementsRef.current = nextElements;
+    forceUpdate((n) => n + 1); // Update canAIUndo/canAIRedo
+    // Reset flag after a tick to allow future onChange events
+    setTimeout(() => {
+      isRestoringRef.current = false;
+    }, 50);
+    return nextElements;
+  }, []);
+
+  // Clear AI undo/redo stacks
+  const clearAIUndoStack = useCallback(() => {
+    aiUndoStackRef.current = [];
+    aiRedoStackRef.current = [];
+    currentAIElementsRef.current = [];
+    forceUpdate((n) => n + 1); // Update canAIUndo/canAIRedo
+  }, []);
+
   // Execute edit - converts blob and calls agentic service
   const executeEdit = useCallback(
     async (
@@ -401,6 +519,15 @@ export function AIManipulationProvider({
     enterReviewMode,
     acceptResult,
     rejectResult,
+
+    // AI Mode Undo Stack
+    canAIUndo,
+    canAIRedo,
+    initializeAIUndoState,
+    pushAIUndoEntry,
+    aiUndo,
+    aiRedo,
+    clearAIUndoStack,
   };
 
   return (

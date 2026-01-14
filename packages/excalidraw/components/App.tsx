@@ -776,6 +776,13 @@ class App extends React.Component<AppProps, AppState> {
             clear: this.resetHistory,
             pause: () => this.history.pause(),
             resume: () => this.history.resume(),
+            overrideState: (
+              undoEmpty: boolean,
+              redoEmpty: boolean,
+              onUndo?: () => void,
+              onRedo?: () => void,
+            ) => this.history.overrideState(undoEmpty, redoEmpty, onUndo, onRedo),
+            clearOverride: () => this.history.clearOverride(),
           },
           "isPaused",
           {

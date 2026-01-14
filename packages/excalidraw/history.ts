@@ -102,11 +102,25 @@ export class History {
    */
   private _paused = false;
 
+  /**
+   * Override state for external undo systems (e.g., AI mode).
+   * When set, isUndoStackEmpty/isRedoStackEmpty return these values
+   * instead of checking the actual stacks.
+   */
+  private _overrideUndoEmpty: boolean | null = null;
+  private _overrideRedoEmpty: boolean | null = null;
+
   public get isUndoStackEmpty() {
+    if (this._overrideUndoEmpty !== null) {
+      return this._overrideUndoEmpty;
+    }
     return this.undoStack.length === 0;
   }
 
   public get isRedoStackEmpty() {
+    if (this._overrideRedoEmpty !== null) {
+      return this._overrideRedoEmpty;
+    }
     return this.redoStack.length === 0;
   }
 
@@ -127,6 +141,45 @@ export class History {
    */
   public resume() {
     this._paused = false;
+  }
+
+  /**
+   * Callbacks for external undo systems (e.g., AI mode).
+   * When set, undo/redo calls these instead of operating on internal stacks.
+   */
+  private _onUndoOverride: (() => void) | null = null;
+  private _onRedoOverride: (() => void) | null = null;
+
+  /**
+   * Override the reported stack empty states and undo/redo behavior.
+   * Use for external undo systems (e.g., AI mode) to control button UI and actions.
+   */
+  public overrideState(
+    undoEmpty: boolean,
+    redoEmpty: boolean,
+    onUndo?: () => void,
+    onRedo?: () => void,
+  ) {
+    this._overrideUndoEmpty = undoEmpty;
+    this._overrideRedoEmpty = redoEmpty;
+    this._onUndoOverride = onUndo ?? null;
+    this._onRedoOverride = onRedo ?? null;
+    this.onHistoryChangedEmitter.trigger(
+      new HistoryChangedEvent(this.isUndoStackEmpty, this.isRedoStackEmpty),
+    );
+  }
+
+  /**
+   * Clear override state, returning to normal stack-based reporting.
+   */
+  public clearOverride() {
+    this._overrideUndoEmpty = null;
+    this._overrideRedoEmpty = null;
+    this._onUndoOverride = null;
+    this._onRedoOverride = null;
+    this.onHistoryChangedEmitter.trigger(
+      new HistoryChangedEvent(this.isUndoStackEmpty, this.isRedoStackEmpty),
+    );
   }
 
   constructor(private readonly store: Store) {}
@@ -163,6 +216,11 @@ export class History {
   }
 
   public undo(elements: SceneElementsMap, appState: AppState) {
+    // If override callback is set, call it instead of normal undo
+    if (this._onUndoOverride) {
+      this._onUndoOverride();
+      return;
+    }
     return this.perform(
       elements,
       appState,
@@ -172,6 +230,11 @@ export class History {
   }
 
   public redo(elements: SceneElementsMap, appState: AppState) {
+    // If override callback is set, call it instead of normal redo
+    if (this._onRedoOverride) {
+      this._onRedoOverride();
+      return;
+    }
     return this.perform(
       elements,
       appState,
