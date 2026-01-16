@@ -394,8 +394,8 @@ export const ThinkingOverlay: React.FC<ThinkingOverlayProps> = ({
               </span>
             </div>
 
-            {/* Accept/Reject buttons - only in reviewing mode */}
-            {status === "reviewing" && (
+            {/* Accept/Reject buttons - shown when images are available */}
+            {iterationImages.length > 0 && (
               <div className="thinking-overlay__actions">
                 {onReject && (
                   <button

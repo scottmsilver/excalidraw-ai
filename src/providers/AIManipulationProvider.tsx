@@ -255,6 +255,7 @@ export function AIManipulationProvider({
     progress: hookProgress,
     error,
     reset: resetAgenticEdit,
+    abort: abortAgenticEdit,
   } = useAgenticEdit();
 
   // Manual state overrides for components that call the service directly
@@ -289,17 +290,23 @@ export function AIManipulationProvider({
     setIsReviewing(true);
   }, []);
 
-  // Accept result at given index
-  const acceptResult = useCallback((_index: number) => {
-    setIsReviewing(false);
-    setIterationImages([]); // Clear images after accepting
-  }, []);
-
-  // Reject result
-  const rejectResult = useCallback(() => {
+  // Shared cleanup for accept/reject - aborts processing and clears state
+  const stopAndClear = useCallback(() => {
+    abortAgenticEdit();
+    setManualIsProcessing(false);
     setIsReviewing(false);
     setIterationImages([]);
-  }, []);
+  }, [abortAgenticEdit]);
+
+  // Accept result at given index (can be called during thinking or reviewing)
+  const acceptResult = useCallback((_index: number) => {
+    stopAndClear();
+  }, [stopAndClear]);
+
+  // Reject result (can be called during thinking or reviewing)
+  const rejectResult = useCallback(() => {
+    stopAndClear();
+  }, [stopAndClear]);
 
   const setProgress = useCallback((event: AIProgressEvent | null) => {
     setManualProgress(event);
