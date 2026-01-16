@@ -1,15 +1,8 @@
 import React, { useState, useCallback } from "react";
 
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-
-import { useCaptureOverlay, overlayStyle, selectionStyle } from "./useCaptureOverlay";
+import { useCaptureOverlay, overlayStyle, type CaptureOverlayProps } from "./useCaptureOverlay";
 import { captureRegionFromCanvas, getStaticCanvas, isClickOnCaptureUI } from "./captureUtils";
-
-interface Props {
-  isActive: boolean;
-  excalidrawAPI: ExcalidrawImperativeAPI | null;
-  onCaptureComplete: () => void;
-}
+import { SelectionOverlaySVG, MIN_CAPTURE_SIZE } from "./captureStyles";
 
 const getBounds = (start: [number, number], end: [number, number]) => ({
   x: Math.min(start[0], end[0]),
@@ -18,7 +11,7 @@ const getBounds = (start: [number, number], end: [number, number]) => ({
   height: Math.abs(end[1] - start[1]),
 });
 
-export const CaptureRectangleOverlay: React.FC<Props> = (props) => {
+export const CaptureRectangleOverlay: React.FC<CaptureOverlayProps> = (props) => {
   const [points, setPoints] = useState<[[number, number], [number, number]] | null>(null);
   const { isDrawing, startDrawing, getSceneCoords, getScreenBounds, finishCapture, appState } =
     useCaptureOverlay(props);
@@ -54,7 +47,7 @@ export const CaptureRectangleOverlay: React.FC<Props> = (props) => {
       const bounds = getBounds(points[0], points[1]);
       setPoints(null);
 
-      if (bounds.width < 10 || bounds.height < 10) return;
+      if (bounds.width < MIN_CAPTURE_SIZE || bounds.height < MIN_CAPTURE_SIZE) return;
 
       const staticCanvas = getStaticCanvas();
       if (!staticCanvas) return;
@@ -78,8 +71,8 @@ export const CaptureRectangleOverlay: React.FC<Props> = (props) => {
       onMouseUp={handleMouseUp}
       onMouseLeave={() => isDrawing && handleMouseUp()}
     >
-      {isDrawing && screenRect && (
-        <div style={{ ...selectionStyle, position: "fixed", left: screenRect.x, top: screenRect.y, width: screenRect.width, height: screenRect.height }} />
+      {isDrawing && screenRect && screenRect.width > 0 && screenRect.height > 0 && (
+        <SelectionOverlaySVG id="rect" shape={{ type: "rect", ...screenRect }} />
       )}
     </div>
   );

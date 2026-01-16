@@ -1,18 +1,11 @@
 import React, { useState, useCallback } from "react";
 import { simplify } from "points-on-curve";
 
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-
-import { useCaptureOverlay, overlayStyle } from "./useCaptureOverlay";
+import { useCaptureOverlay, overlayStyle, type CaptureOverlayProps } from "./useCaptureOverlay";
 import { captureRegionWithMask, getBoundsFromPoints, getStaticCanvas, isClickOnCaptureUI } from "./captureUtils";
+import { SelectionOverlaySVG, pointsToPolygonString, MIN_CAPTURE_SIZE } from "./captureStyles";
 
-interface Props {
-  isActive: boolean;
-  excalidrawAPI: ExcalidrawImperativeAPI | null;
-  onCaptureComplete: () => void;
-}
-
-export const CaptureLassoOverlay: React.FC<Props> = (props) => {
+export const CaptureLassoOverlay: React.FC<CaptureOverlayProps> = (props) => {
   const [points, setPoints] = useState<Array<[number, number]>>([]);
   const { isDrawing, startDrawing, getSceneCoords, getScreenPoints, finishCapture, appState } =
     useCaptureOverlay(props);
@@ -51,13 +44,13 @@ export const CaptureLassoOverlay: React.FC<Props> = (props) => {
       if (simplified.length < 3) return;
 
       const bounds = getBoundsFromPoints(simplified);
-      if (bounds.width < 10 || bounds.height < 10) return;
+      if (bounds.width < MIN_CAPTURE_SIZE || bounds.height < MIN_CAPTURE_SIZE) return;
 
       const staticCanvas = getStaticCanvas();
       if (!staticCanvas) return;
 
       const captured = captureRegionWithMask(staticCanvas, simplified, appState);
-      if (captured) await finishCapture(captured, bounds);
+      if (captured) await finishCapture(captured, bounds, simplified);
     },
     [isDrawing, appState, points, finishCapture],
   );
@@ -65,7 +58,7 @@ export const CaptureLassoOverlay: React.FC<Props> = (props) => {
   if (!props.isActive) return null;
 
   const screenPoints = getScreenPoints(points);
-  const polygonStr = screenPoints.map(([x, y]) => `${x},${y}`).join(" ");
+  const polygonStr = pointsToPolygonString(screenPoints);
 
   return (
     <div
@@ -77,15 +70,7 @@ export const CaptureLassoOverlay: React.FC<Props> = (props) => {
       onMouseLeave={() => isDrawing && handleMouseUp()}
     >
       {isDrawing && screenPoints.length >= 2 && (
-        <svg style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
-          <polygon
-            points={polygonStr}
-            fill="rgba(0, 0, 0, 0.3)"
-            stroke="#6965db"
-            strokeWidth="2"
-            strokeDasharray="5,5"
-          />
-        </svg>
+        <SelectionOverlaySVG id="lasso" shape={{ type: "polygon", points: polygonStr }} />
       )}
     </div>
   );

@@ -9,6 +9,8 @@ import {
 import type { AppState, ExcalidrawImperativeAPI, DataURL } from "@excalidraw/excalidraw/types";
 import type { FileId } from "@excalidraw/element/types";
 
+import { MIN_CAPTURE_SIZE } from "./captureStyles";
+
 export interface CaptureRegionBounds {
   x: number;
   y: number;
@@ -85,7 +87,7 @@ export const captureRegionFromCanvas = (
   const canvasHeight = bounds.height * scale;
 
   // Validate dimensions
-  if (canvasWidth < 10 || canvasHeight < 10) {
+  if (canvasWidth < MIN_CAPTURE_SIZE || canvasHeight < MIN_CAPTURE_SIZE) {
     console.warn("Capture region too small");
     return null;
   }
@@ -118,13 +120,24 @@ export const captureRegionFromCanvas = (
 };
 
 /**
+ * Mask points stored with captured images for selection overlay rendering.
+ * Points are relative to the element's bounding box (0,0 = top-left of bounds).
+ */
+export interface CapturedMaskData {
+  /** Normalized mask points (0-1 range relative to bounds) */
+  normalizedPoints: Array<[number, number]>;
+}
+
+/**
  * Create an image element from a captured canvas and add it to the scene.
  * The element is selected and the selection tool is activated.
+ * Optionally stores mask points for selection overlay rendering.
  */
 export const createImageFromCapture = async (
   excalidrawAPI: ExcalidrawImperativeAPI,
   canvas: HTMLCanvasElement,
   bounds: CaptureRegionBounds,
+  maskPoints?: Array<[number, number]>,
 ): Promise<string> => {
   const dataURL = canvas.toDataURL("image/png") as DataURL;
   const fileId = `capture-${Date.now()}-${randomId()}` as FileId;
@@ -138,6 +151,17 @@ export const createImageFromCapture = async (
     },
   ]);
 
+  // Normalize mask points to 0-1 range relative to bounds
+  const customData: { capturedMask?: CapturedMaskData } = {};
+  if (maskPoints && maskPoints.length >= 3) {
+    customData.capturedMask = {
+      normalizedPoints: maskPoints.map(([x, y]) => [
+        (x - bounds.x) / bounds.width,
+        (y - bounds.y) / bounds.height,
+      ]),
+    };
+  }
+
   const imageElement = newImageElement({
     type: "image",
     x: bounds.x,
@@ -146,6 +170,7 @@ export const createImageFromCapture = async (
     height: bounds.height,
     fileId,
     status: "saved",
+    customData: Object.keys(customData).length > 0 ? customData : undefined,
   });
 
   const currentElements = excalidrawAPI.getSceneElements();
@@ -207,7 +232,7 @@ export const captureRegionWithMask = (
   const scale = window.devicePixelRatio * zoom.value;
 
   // Validate dimensions
-  if (bounds.width < 10 || bounds.height < 10) {
+  if (bounds.width < MIN_CAPTURE_SIZE || bounds.height < MIN_CAPTURE_SIZE) {
     console.warn("Capture region too small");
     return null;
   }
@@ -223,18 +248,24 @@ export const captureRegionWithMask = (
     return null;
   }
 
-  // Create clip path from lasso points (in canvas pixel coords relative to bounds)
-  ctx.beginPath();
-  lassoPoints.forEach(([x, y], i) => {
-    const canvasX = (x - bounds.x) * scale;
-    const canvasY = (y - bounds.y) * scale;
-    if (i === 0) {
-      ctx.moveTo(canvasX, canvasY);
-    } else {
-      ctx.lineTo(canvasX, canvasY);
-    }
-  });
-  ctx.closePath();
+  // Helper to draw the lasso path
+  const drawLassoPath = () => {
+    ctx.beginPath();
+    lassoPoints.forEach(([x, y], i) => {
+      const canvasX = (x - bounds.x) * scale;
+      const canvasY = (y - bounds.y) * scale;
+      if (i === 0) {
+        ctx.moveTo(canvasX, canvasY);
+      } else {
+        ctx.lineTo(canvasX, canvasY);
+      }
+    });
+    ctx.closePath();
+  };
+
+  // Save state, create clip, and draw image
+  ctx.save();
+  drawLassoPath();
   ctx.clip();
 
   // Draw source canvas region through clip
@@ -251,6 +282,9 @@ export const captureRegionWithMask = (
     bounds.width * scale,
     bounds.height * scale,
   );
+
+  // Restore to remove clip
+  ctx.restore();
 
   return outputCanvas;
 };

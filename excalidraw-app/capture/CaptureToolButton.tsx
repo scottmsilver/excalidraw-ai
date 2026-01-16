@@ -5,18 +5,26 @@ import {
   cropIcon,
   RectangleIcon,
   LassoIcon,
+  polygonIcon,
 } from "@excalidraw/excalidraw/components/icons";
 
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
 import { CaptureRectangleOverlay } from "./CaptureRectangleOverlay";
 import { CaptureLassoOverlay } from "./CaptureLassoOverlay";
+import { CapturePolygonOverlay } from "./CapturePolygonOverlay";
 
 interface CaptureToolButtonProps {
   excalidrawAPI: ExcalidrawImperativeAPI | null;
 }
 
-type CaptureMode = "rectangle" | "lasso";
+type CaptureMode = "rectangle" | "lasso" | "polygon";
+
+/** Get active/inactive styles for mode buttons */
+const getModeButtonStyle = (isActive: boolean): React.CSSProperties => ({
+  color: isActive ? "var(--color-primary)" : undefined,
+  backgroundColor: isActive ? "var(--color-primary-light)" : undefined,
+});
 
 /**
  * Capture tool button for the toolbar.
@@ -83,12 +91,7 @@ export const CaptureToolButton: React.FC<CaptureToolButtonProps> = ({
             className="ToolIcon_type_button"
             onClick={() => setCaptureMode("rectangle")}
             title="Rectangle selection"
-            style={{
-              color: captureMode === "rectangle" ? "var(--color-primary)" : undefined,
-              backgroundColor: captureMode === "rectangle"
-                ? "var(--color-primary-light)"
-                : undefined,
-            }}
+            style={getModeButtonStyle(captureMode === "rectangle")}
           >
             <div className="ToolIcon__icon" aria-hidden="true">
               {RectangleIcon}
@@ -99,29 +102,43 @@ export const CaptureToolButton: React.FC<CaptureToolButtonProps> = ({
             className="ToolIcon_type_button"
             onClick={() => setCaptureMode("lasso")}
             title="Lasso selection"
-            style={{
-              color: captureMode === "lasso" ? "var(--color-primary)" : undefined,
-              backgroundColor: captureMode === "lasso"
-                ? "var(--color-primary-light)"
-                : undefined,
-            }}
+            style={getModeButtonStyle(captureMode === "lasso")}
           >
             <div className="ToolIcon__icon" aria-hidden="true">
               {LassoIcon}
+            </div>
+          </button>
+          <button
+            type="button"
+            className="ToolIcon_type_button"
+            onClick={() => setCaptureMode("polygon")}
+            title="Polygon selection"
+            style={getModeButtonStyle(captureMode === "polygon")}
+          >
+            <div className="ToolIcon__icon" aria-hidden="true">
+              {polygonIcon}
             </div>
           </button>
         </div>
       )}
 
       {/* Render appropriate overlay based on mode */}
-      {captureMode === "rectangle" ? (
+      {captureMode === "rectangle" && (
         <CaptureRectangleOverlay
           isActive={isCaptureMode}
           excalidrawAPI={excalidrawAPI}
           onCaptureComplete={handleCaptureComplete}
         />
-      ) : (
+      )}
+      {captureMode === "lasso" && (
         <CaptureLassoOverlay
+          isActive={isCaptureMode}
+          excalidrawAPI={excalidrawAPI}
+          onCaptureComplete={handleCaptureComplete}
+        />
+      )}
+      {captureMode === "polygon" && (
+        <CapturePolygonOverlay
           isActive={isCaptureMode}
           excalidrawAPI={excalidrawAPI}
           onCaptureComplete={handleCaptureComplete}

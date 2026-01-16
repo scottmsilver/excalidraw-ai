@@ -27,6 +27,16 @@ vi.mock("./CaptureLassoOverlay", () => ({
   ),
 }));
 
+vi.mock("./CapturePolygonOverlay", () => ({
+  CapturePolygonOverlay: ({ isActive, onCaptureComplete }: any) => (
+    <div data-testid="polygon-overlay" data-active={isActive}>
+      <button onClick={onCaptureComplete} data-testid="complete-capture-polygon">
+        Complete
+      </button>
+    </div>
+  ),
+}));
+
 describe("CaptureToolButton", () => {
   let mockExcalidrawAPI: ExcalidrawImperativeAPI;
 
@@ -126,6 +136,21 @@ describe("CaptureToolButton", () => {
     // Rectangle overlay should now be rendered (lasso no longer rendered)
     expect(screen.getByTestId("rectangle-overlay").dataset.active).toBe("true");
     expect(screen.queryByTestId("lasso-overlay")).toBeNull();
+  });
+
+  it("switches to polygon mode when polygon button is clicked", () => {
+    render(<CaptureToolButton excalidrawAPI={mockExcalidrawAPI} />);
+
+    // Activate capture mode
+    fireEvent.click(screen.getByTestId("capture-tool-button"));
+
+    // Click polygon mode button
+    fireEvent.click(screen.getByTitle("Polygon selection"));
+
+    // Now polygon overlay should be rendered
+    expect(screen.queryByTestId("rectangle-overlay")).toBeNull();
+    expect(screen.queryByTestId("lasso-overlay")).toBeNull();
+    expect(screen.getByTestId("polygon-overlay").dataset.active).toBe("true");
   });
 
   it("deactivates capture mode when capture completes", () => {

@@ -101,7 +101,7 @@ import { ManipulationDialog } from "../src/components/ManipulationDialog";
 import { extractShapesFromElements } from "../src/utils/shapeExtractor";
 
 import { ThinkingOverlay } from "./components/ThinkingOverlay";
-import { CaptureToolbarContent } from "./capture";
+import { CaptureToolbarContent, MaskedImageSelectionOverlay } from "./capture";
 
 import CustomStats from "./CustomStats";
 import {
@@ -1949,6 +1949,9 @@ const ExcalidrawWrapper = () => {
 
         {/* Capture tool button injected into toolbar via tunnel */}
         <CaptureToolbarContent excalidrawAPI={excalidrawAPI} />
+
+        {/* Masked image selection overlay - shows dim on negative space for selected lasso/polygon captures */}
+        <MaskedImageSelectionOverlay excalidrawAPI={excalidrawAPI} />
 
         {/* AI Manipulation UI - Reference Points Overlay, Shift+Click Handler & Dialog */}
         <AIManipulationUI excalidrawAPI={excalidrawAPI} />

@@ -3,6 +3,7 @@ import { render, fireEvent, act } from "@testing-library/react";
 
 import { CaptureRectangleOverlay } from "./CaptureRectangleOverlay";
 import { CaptureLassoOverlay } from "./CaptureLassoOverlay";
+import { CapturePolygonOverlay } from "./CapturePolygonOverlay";
 
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
@@ -93,9 +94,9 @@ describe("CaptureRectangleOverlay Integration", () => {
     // Move mouse - should show selection rectangle
     fireEvent.mouseMove(overlay, { clientX: 200, clientY: 200 });
 
-    // Selection rectangle should be visible (has border style)
-    const selection = container.querySelector("[data-capture-overlay] > div");
-    expect(selection).not.toBeNull();
+    // Selection rectangle should be visible as SVG
+    const svg = container.querySelector("[data-capture-overlay] > svg");
+    expect(svg).not.toBeNull();
   });
 
   it("handles mouse up without crashing", async () => {
@@ -502,9 +503,9 @@ describe("Overlay coordinate handling", () => {
     fireEvent.mouseDown(overlay, { clientX: 100, clientY: 100 });
     fireEvent.mouseMove(overlay, { clientX: 200, clientY: 200 });
 
-    // Selection should render (coordinate conversion shouldn't crash)
-    const selection = container.querySelector("[data-capture-overlay] > div");
-    expect(selection).not.toBeNull();
+    // Selection should render as SVG (coordinate conversion shouldn't crash)
+    const svg = container.querySelector("[data-capture-overlay] > svg");
+    expect(svg).not.toBeNull();
   });
 
   it("rectangle works with scroll offset", () => {
@@ -538,8 +539,8 @@ describe("Overlay coordinate handling", () => {
     fireEvent.mouseDown(overlay, { clientX: 100, clientY: 100 });
     fireEvent.mouseMove(overlay, { clientX: 200, clientY: 200 });
 
-    const selection = container.querySelector("[data-capture-overlay] > div");
-    expect(selection).not.toBeNull();
+    const svg = container.querySelector("[data-capture-overlay] > svg");
+    expect(svg).not.toBeNull();
   });
 
   it("lasso works with zoom and scroll combined", () => {
@@ -576,5 +577,257 @@ describe("Overlay coordinate handling", () => {
 
     const polygon = container.querySelector("polygon");
     expect(polygon).not.toBeNull();
+  });
+});
+
+describe("CapturePolygonOverlay Integration", () => {
+  let mockExcalidrawAPI: ExcalidrawImperativeAPI;
+  let onCaptureComplete: ReturnType<typeof vi.fn>;
+  let originalElementsFromPoint: typeof document.elementsFromPoint;
+
+  beforeEach(() => {
+    onCaptureComplete = vi.fn();
+    mockExcalidrawAPI = {
+      getAppState: vi.fn().mockReturnValue({
+        activeTool: { type: "selection" },
+        scrollX: 0,
+        scrollY: 0,
+        zoom: { value: 1 },
+        offsetLeft: 0,
+        offsetTop: 0,
+        width: 1000,
+        height: 800,
+      }),
+      setActiveTool: vi.fn(),
+      getSceneElements: vi.fn().mockReturnValue([]),
+      addFiles: vi.fn().mockResolvedValue(undefined),
+      updateScene: vi.fn(),
+    } as unknown as ExcalidrawImperativeAPI;
+
+    originalElementsFromPoint = document.elementsFromPoint;
+    document.elementsFromPoint = vi.fn().mockReturnValue([]);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    document.elementsFromPoint = originalElementsFromPoint;
+  });
+
+  it("renders nothing when not active", () => {
+    const { container } = render(
+      <CapturePolygonOverlay
+        isActive={false}
+        excalidrawAPI={mockExcalidrawAPI}
+        onCaptureComplete={onCaptureComplete}
+      />,
+    );
+
+    expect(container.querySelector("[data-capture-overlay]")).toBeNull();
+  });
+
+  it("renders overlay when active", () => {
+    const { container } = render(
+      <CapturePolygonOverlay
+        isActive={true}
+        excalidrawAPI={mockExcalidrawAPI}
+        onCaptureComplete={onCaptureComplete}
+      />,
+    );
+
+    expect(container.querySelector("[data-capture-overlay]")).not.toBeNull();
+  });
+
+  it("adds vertex on click", () => {
+    const { container } = render(
+      <CapturePolygonOverlay
+        isActive={true}
+        excalidrawAPI={mockExcalidrawAPI}
+        onCaptureComplete={onCaptureComplete}
+      />,
+    );
+
+    const overlay = container.querySelector("[data-capture-overlay]")!;
+
+    // Click to add first vertex
+    fireEvent.click(overlay, { clientX: 100, clientY: 100 });
+
+    // Should show a circle for the vertex
+    const circles = container.querySelectorAll("circle");
+    expect(circles.length).toBe(1);
+  });
+
+  it("shows line between two points", () => {
+    const { container } = render(
+      <CapturePolygonOverlay
+        isActive={true}
+        excalidrawAPI={mockExcalidrawAPI}
+        onCaptureComplete={onCaptureComplete}
+      />,
+    );
+
+    const overlay = container.querySelector("[data-capture-overlay]")!;
+
+    // Click to add two vertices
+    fireEvent.click(overlay, { clientX: 100, clientY: 100 });
+    fireEvent.click(overlay, { clientX: 200, clientY: 100 });
+
+    // Should show a line
+    const line = container.querySelector("line");
+    expect(line).not.toBeNull();
+
+    // Should have two vertex circles
+    const circles = container.querySelectorAll("circle");
+    expect(circles.length).toBe(2);
+  });
+
+  it("shows polygon with three or more points", () => {
+    const { container } = render(
+      <CapturePolygonOverlay
+        isActive={true}
+        excalidrawAPI={mockExcalidrawAPI}
+        onCaptureComplete={onCaptureComplete}
+      />,
+    );
+
+    const overlay = container.querySelector("[data-capture-overlay]")!;
+
+    // Click to add three vertices
+    fireEvent.click(overlay, { clientX: 100, clientY: 100 });
+    fireEvent.click(overlay, { clientX: 200, clientY: 100 });
+    fireEvent.click(overlay, { clientX: 150, clientY: 200 });
+
+    // Should show a polygon
+    const polygon = container.querySelector("polygon");
+    expect(polygon).not.toBeNull();
+
+    // Should have three vertex circles
+    const circles = container.querySelectorAll("circle");
+    expect(circles.length).toBe(3);
+  });
+
+  it("handles double-click to complete without crashing", async () => {
+    const { container } = render(
+      <CapturePolygonOverlay
+        isActive={true}
+        excalidrawAPI={mockExcalidrawAPI}
+        onCaptureComplete={onCaptureComplete}
+      />,
+    );
+
+    const overlay = container.querySelector("[data-capture-overlay]")!;
+
+    await act(async () => {
+      // Add three vertices
+      fireEvent.click(overlay, { clientX: 100, clientY: 100 });
+      fireEvent.click(overlay, { clientX: 200, clientY: 100 });
+      fireEvent.click(overlay, { clientX: 150, clientY: 200 });
+
+      // Double-click to complete
+      fireEvent.doubleClick(overlay, { clientX: 150, clientY: 150 });
+    });
+
+    // No assertion - test passes if no error thrown
+    expect(true).toBe(true);
+  });
+
+  it("shows instructions when drawing", () => {
+    const { container } = render(
+      <CapturePolygonOverlay
+        isActive={true}
+        excalidrawAPI={mockExcalidrawAPI}
+        onCaptureComplete={onCaptureComplete}
+      />,
+    );
+
+    const overlay = container.querySelector("[data-capture-overlay]")!;
+
+    // Click to start drawing
+    fireEvent.click(overlay, { clientX: 100, clientY: 100 });
+
+    // Should show instructions
+    expect(container.textContent).toContain("Click to add points");
+  });
+
+  it("shows completion instructions with 3+ points", () => {
+    const { container } = render(
+      <CapturePolygonOverlay
+        isActive={true}
+        excalidrawAPI={mockExcalidrawAPI}
+        onCaptureComplete={onCaptureComplete}
+      />,
+    );
+
+    const overlay = container.querySelector("[data-capture-overlay]")!;
+
+    // Add three vertices
+    fireEvent.click(overlay, { clientX: 100, clientY: 100 });
+    fireEvent.click(overlay, { clientX: 200, clientY: 100 });
+    fireEvent.click(overlay, { clientX: 150, clientY: 200 });
+
+    // Should show completion instructions
+    expect(container.textContent).toContain("Double-click");
+  });
+
+  it("cancels on Escape key", async () => {
+    render(
+      <CapturePolygonOverlay
+        isActive={true}
+        excalidrawAPI={mockExcalidrawAPI}
+        onCaptureComplete={onCaptureComplete}
+      />,
+    );
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+
+    expect(onCaptureComplete).toHaveBeenCalled();
+  });
+
+  it("ignores double-click with fewer than 3 points", async () => {
+    const { container } = render(
+      <CapturePolygonOverlay
+        isActive={true}
+        excalidrawAPI={mockExcalidrawAPI}
+        onCaptureComplete={onCaptureComplete}
+      />,
+    );
+
+    const overlay = container.querySelector("[data-capture-overlay]")!;
+
+    await act(async () => {
+      // Add only two vertices
+      fireEvent.click(overlay, { clientX: 100, clientY: 100 });
+      fireEvent.click(overlay, { clientX: 200, clientY: 100 });
+
+      // Double-click to try to complete
+      fireEvent.doubleClick(overlay, { clientX: 150, clientY: 150 });
+    });
+
+    // Points should still be there (not cleared)
+    const circles = container.querySelectorAll("circle");
+    expect(circles.length).toBe(2);
+  });
+
+  it("first vertex is highlighted", () => {
+    const { container } = render(
+      <CapturePolygonOverlay
+        isActive={true}
+        excalidrawAPI={mockExcalidrawAPI}
+        onCaptureComplete={onCaptureComplete}
+      />,
+    );
+
+    const overlay = container.querySelector("[data-capture-overlay]")!;
+
+    // Add three vertices
+    fireEvent.click(overlay, { clientX: 100, clientY: 100 });
+    fireEvent.click(overlay, { clientX: 200, clientY: 100 });
+    fireEvent.click(overlay, { clientX: 150, clientY: 200 });
+
+    // First circle should be larger (r=8 vs r=5)
+    const circles = container.querySelectorAll("circle");
+    expect(circles[0].getAttribute("r")).toBe("8");
+    expect(circles[1].getAttribute("r")).toBe("5");
   });
 });

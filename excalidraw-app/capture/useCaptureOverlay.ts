@@ -9,7 +9,10 @@ import {
   type CaptureRegionBounds,
 } from "./captureUtils";
 
-interface UseCaptureOverlayOptions {
+/**
+ * Props shared by all capture overlay components.
+ */
+export interface CaptureOverlayProps {
   isActive: boolean;
   excalidrawAPI: ExcalidrawImperativeAPI | null;
   onCaptureComplete: () => void;
@@ -23,7 +26,7 @@ export const useCaptureOverlay = ({
   isActive,
   excalidrawAPI,
   onCaptureComplete,
-}: UseCaptureOverlayOptions) => {
+}: CaptureOverlayProps) => {
   const [isDrawing, setIsDrawing] = useState(false);
   const previousToolRef = useRef<{ type: string } | null>(null);
   const captureCompletedRef = useRef(false);
@@ -107,9 +110,9 @@ export const useCaptureOverlay = ({
   );
 
   const finishCapture = useCallback(
-    async (canvas: HTMLCanvasElement, bounds: CaptureRegionBounds) => {
+    async (canvas: HTMLCanvasElement, bounds: CaptureRegionBounds, maskPoints?: Array<[number, number]>) => {
       if (!excalidrawAPI) return;
-      await createImageFromCapture(excalidrawAPI, canvas, bounds);
+      await createImageFromCapture(excalidrawAPI, canvas, bounds, maskPoints);
       captureCompletedRef.current = true;
       onCaptureComplete();
     },
@@ -127,7 +130,7 @@ export const useCaptureOverlay = ({
   };
 };
 
-// Shared overlay container styles
+/** Style for the capture overlay container */
 export const overlayStyle: React.CSSProperties = {
   position: "fixed",
   top: 0,
@@ -136,12 +139,4 @@ export const overlayStyle: React.CSSProperties = {
   height: "100%",
   cursor: "crosshair",
   zIndex: 999,
-};
-
-// Shared selection visual styles
-export const selectionStyle: React.CSSProperties = {
-  border: "2px solid #6965db",
-  backgroundColor: "rgba(0, 0, 0, 0.3)",
-  pointerEvents: "none",
-  boxSizing: "border-box",
 };
