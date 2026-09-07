@@ -1,18 +1,8 @@
 import React, { useCallback } from "react";
 
-import type { ReferencePointMarkerProps } from "./types";
+import { MARKER_COLORS } from "./markerColors";
 
-/**
- * Color palette for markers - cycles through these colors
- */
-const COLOR_PALETTE = [
-  { bg: "#E53935", border: "#C62828", text: "#ffffff" }, // Red
-  { bg: "#1E88E5", border: "#1565C0", text: "#ffffff" }, // Blue
-  { bg: "#43A047", border: "#2E7D32", text: "#ffffff" }, // Green
-  { bg: "#FB8C00", border: "#EF6C00", text: "#ffffff" }, // Orange
-  { bg: "#8E24AA", border: "#6A1B9A", text: "#ffffff" }, // Purple
-  { bg: "#00ACC1", border: "#00838F", text: "#ffffff" }, // Cyan
-] as const;
+import type { ReferencePointMarkerProps } from "./types";
 
 /**
  * Visual styling constants for reference point markers
@@ -36,7 +26,7 @@ const MARKER_STYLES = {
  * Get colors for a marker based on its index
  */
 function getMarkerColors(index: number) {
-  return COLOR_PALETTE[index % COLOR_PALETTE.length];
+  return MARKER_COLORS[index % MARKER_COLORS.length];
 }
 
 /**

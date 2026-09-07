@@ -22,8 +22,13 @@
  */
 
 import { toApiReferencePoints } from "../components/ReferencePoints";
+import { addReferenceMarkers } from "../utils/referencePointImage";
 
-import { agenticEdit, type AIProgressEvent, type ShapeMetadata } from "./apiClient";
+import {
+  agenticEdit,
+  type AIProgressEvent,
+  type ShapeMetadata,
+} from "./apiClient";
 
 import type { ReferencePoint } from "../components/ReferencePoints";
 
@@ -39,7 +44,7 @@ export interface AgenticEditParams {
   cleanImageBlob: Blob;
   /** Annotated image as a Blob (with user's drawings visible for AI guidance) */
   annotatedImageBlob?: Blob;
-  /** Reference points placed on the canvas (A, B, C markers) */
+  /** A/B/C markers already transformed from scene to exported image coordinates. */
   referencePoints: ReferencePoint[];
   /** User-drawn shapes/annotations for context (lines, arrows, rectangles, etc.) */
   shapes?: ShapeMetadata[];
@@ -166,9 +171,15 @@ export async function executeAgenticEdit(
   // Step 1: Convert blobs to base64 data URLs
   const cleanImageBase64 = await blobToBase64(cleanImageBlob);
 
-  // Convert annotated image if provided
-  const annotatedImageBase64 = annotatedImageBlob
-    ? await blobToBase64(annotatedImageBlob)
+  // Canvas exports omit the DOM marker overlays. Bake them into guidance only,
+  // keeping the clean source unchanged and using the same coordinates as the API.
+  const guidanceImage =
+    annotatedImageBlob ??
+    (referencePoints.length > 0 ? cleanImageBlob : undefined);
+  const annotatedImageBase64 = guidanceImage
+    ? await blobToBase64(
+        await addReferenceMarkers(guidanceImage, referencePoints),
+      )
     : undefined;
 
   // Step 2: Convert reference points to API format
