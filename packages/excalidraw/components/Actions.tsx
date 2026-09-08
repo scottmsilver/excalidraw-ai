@@ -1,10 +1,11 @@
 import clsx from "clsx";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Popover } from "radix-ui";
 
 import { CLASSES } from "@excalidraw/common";
 
 import { isArrowElement } from "@excalidraw/element";
+import { supportsAutoContrast } from "@excalidraw/element/autoContrast";
 
 import type {
   ExcalidrawElement,
@@ -41,6 +42,7 @@ import {
   adjustmentsIcon,
   DotsHorizontalIcon,
   pencilIcon,
+  palette,
 } from "./icons";
 
 import { Island } from "./Island";
@@ -187,16 +189,17 @@ export const SelectedShapeActions = ({
 
   return (
     <div className="selected-shape-actions">
-      <AutoContrastControls elements={targetElements} app={app} />
+      <AutoContrastControls elements={targetElements} app={app}>
+        <div>{predicates.strokeColor && renderAction("changeStrokeColor")}</div>
+        {predicates.backgroundColor && (
+          <div>{renderAction("changeBackgroundColor")}</div>
+        )}
+      </AutoContrastControls>
       {singleCallout(targetElements) && (
         <CalloutStyleControls
           element={singleCallout(targetElements)!}
           app={app}
         />
-      )}
-      <div>{predicates.strokeColor && renderAction("changeStrokeColor")}</div>
-      {predicates.backgroundColor && (
-        <div>{renderAction("changeBackgroundColor")}</div>
       )}
       {predicates.fill && renderAction("changeFillStyle")}
 
@@ -268,10 +271,6 @@ const CombinedShapeProperties = ({
   callout?: ExcalidrawElement;
   app: AppClassProperties;
 }) => {
-  const targetElements = getTargetElements(
-    app.scene.getNonDeletedElementsMap(),
-    appState,
-  );
   const shouldShowCombinedProperties =
     predicates.hasSelection ||
     (appState.activeTool.type !== "selection" &&
@@ -324,7 +323,6 @@ const CombinedShapeProperties = ({
             onClose={() => {}}
           >
             <div className="selected-shape-actions">
-              <AutoContrastControls elements={targetElements} app={app} />
               {callout?.type === "callout" && (
                 <CalloutStyleControls element={callout} app={app} />
               )}
@@ -649,6 +647,58 @@ const LinearEditorAction = ({
  * Compact styles panel — the collapsed, popover-driven layout used on tablets
  * and on desktop when the UI is in "compact" mode.
  */
+const CompactColors = ({
+  elements,
+  app,
+  renderAction,
+  predicates,
+}: {
+  elements: readonly ExcalidrawElement[];
+  app: AppClassProperties;
+  renderAction: ActionManager["renderAction"];
+  predicates: ShapeActionPredicates;
+}) => {
+  // Local disclosure state keeps the containing panel open when a nested
+  // color picker uses appState.openPopup for its own palette.
+  const [open, setOpen] = useState(false);
+  const { container } = useExcalidrawContainer();
+  return (
+    <div className="compact-action-item">
+      <Popover.Root open={open} onOpenChange={setOpen}>
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            aria-label="Colors"
+            title="Colors"
+            className={clsx("compact-action-button", { active: open })}
+          >
+            {palette}
+          </button>
+        </Popover.Trigger>
+        {open && (
+          <PropertiesPopover
+            className={PROPERTIES_CLASSES}
+            container={container}
+            style={{ width: "12rem", maxWidth: "calc(100vw - 3rem)" }}
+            onClose={() => {}}
+          >
+            <div className="selected-shape-actions">
+              <AutoContrastControls elements={elements} app={app}>
+                {predicates.strokeColor && (
+                  <div>{renderAction("changeStrokeColor")}</div>
+                )}
+                {predicates.backgroundColor && (
+                  <div>{renderAction("changeBackgroundColor")}</div>
+                )}
+              </AutoContrastControls>
+            </div>
+          </PropertiesPopover>
+        )}
+      </Popover.Root>
+    </div>
+  );
+};
+
 export const CompactShapeActions = ({
   appState,
   elementsMap,
@@ -673,22 +723,33 @@ export const CompactShapeActions = ({
 
   return (
     <div className="compact-shape-actions">
-      {/* Stroke Color */}
-      {predicates.strokeColor && (
-        <div className={clsx("compact-action-item")}>
-          {renderAction("changeStrokeColor")}
-        </div>
-      )}
-
-      {/* Background Color (the bucket fill variant excludes `transparent`) */}
-      {predicates.backgroundColor && (
-        <div className="compact-action-item">
-          {renderAction(
-            appState.activeTool.type === "bucketfill"
-              ? "changeBucketFillBackgroundColor"
-              : "changeBackgroundColor",
+      {targetElements.some(supportsAutoContrast) ? (
+        <CompactColors
+          elements={targetElements}
+          app={app}
+          renderAction={renderAction}
+          predicates={predicates}
+        />
+      ) : (
+        <>
+          {/* Stroke Color */}
+          {predicates.strokeColor && (
+            <div className={clsx("compact-action-item")}>
+              {renderAction("changeStrokeColor")}
+            </div>
           )}
-        </div>
+
+          {/* Background Color (the bucket fill variant excludes `transparent`) */}
+          {predicates.backgroundColor && (
+            <div className="compact-action-item">
+              {renderAction(
+                appState.activeTool.type === "bucketfill"
+                  ? "changeBucketFillBackgroundColor"
+                  : "changeBackgroundColor",
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {/* Freedraw pressure: standalone button cycling the variability mode */}
@@ -835,20 +896,31 @@ export const MobileShapeActions = ({
           flex: 1,
         }}
       >
-        {predicates.strokeColor && (
-          <div className={clsx("compact-action-item")}>
-            {renderAction("changeStrokeColor")}
-          </div>
-        )}
-        {/* Background Color (the bucket fill variant excludes `transparent`) */}
-        {predicates.backgroundColor && (
-          <div className="compact-action-item">
-            {renderAction(
-              appState.activeTool.type === "bucketfill"
-                ? "changeBucketFillBackgroundColor"
-                : "changeBackgroundColor",
+        {targetElements.some(supportsAutoContrast) ? (
+          <CompactColors
+            elements={targetElements}
+            app={app}
+            renderAction={renderAction}
+            predicates={predicates}
+          />
+        ) : (
+          <>
+            {predicates.strokeColor && (
+              <div className={clsx("compact-action-item")}>
+                {renderAction("changeStrokeColor")}
+              </div>
             )}
-          </div>
+            {/* Background Color (the bucket fill variant excludes `transparent`) */}
+            {predicates.backgroundColor && (
+              <div className="compact-action-item">
+                {renderAction(
+                  appState.activeTool.type === "bucketfill"
+                    ? "changeBucketFillBackgroundColor"
+                    : "changeBackgroundColor",
+                )}
+              </div>
+            )}
+          </>
         )}
         <CombinedShapeProperties
           app={app}

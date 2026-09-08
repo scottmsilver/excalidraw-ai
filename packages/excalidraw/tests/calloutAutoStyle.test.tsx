@@ -34,8 +34,14 @@ describe("Auto callout integration", () => {
   });
 
   it("shows independent Auto choices and locks only the field changed manually", () => {
-    expect(screen.getByLabelText("Auto foreground")).toBeChecked();
-    expect(screen.getByLabelText("Auto background")).toBeChecked();
+    expect(screen.getByLabelText("Auto foreground")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByLabelText("Auto background")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     act(() =>
       h.app.actionManager.executeAction(actionChangeStrokeColor, "api", {
         currentItemStrokeColor: "#ff0000",
@@ -72,8 +78,8 @@ describe("Auto callout integration", () => {
     API.setAppState({ theme: "dark" });
     const before =
       h.elements[0].type === "callout" && h.elements[0].calloutResolvedStyle!;
-    fireEvent.click(screen.getByLabelText("Auto foreground"));
-    fireEvent.click(screen.getByLabelText("Auto background"));
+    fireEvent.click(screen.getByLabelText("Manual foreground"));
+    fireEvent.click(screen.getByLabelText("Manual background"));
     expect(h.elements[0]).toMatchObject({
       calloutResolvedStyle: {
         foreground: before && before.foreground,

@@ -20,11 +20,17 @@ export const getAutoContrastModes = (element: ExcalidrawElement) =>
       (element.type === "callout" ? element.calloutAutoStyle : undefined)
     : undefined;
 
-export const getAutoContrastResolved = (element: ExcalidrawElement) =>
-  supportsAutoContrast(element)
+export const getAutoContrastResolved = (element: ExcalidrawElement) => {
+  const modes = getAutoContrastModes(element);
+  // A cached automatic appearance must not override fully manual styling.
+  if (modes && !modes.foreground && !modes.background && !modes.opacity) {
+    return undefined;
+  }
+  return supportsAutoContrast(element)
     ? element.autoContrastResolved ??
-      (element.type === "callout" ? element.calloutResolvedStyle : undefined)
+        (element.type === "callout" ? element.calloutResolvedStyle : undefined)
     : undefined;
+};
 
 export const getAutoContrastManualColors = (element: ExcalidrawElement) =>
   supportsAutoContrast(element)

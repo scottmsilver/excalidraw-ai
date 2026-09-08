@@ -4,6 +4,10 @@ Implemented on `feature/shared-auto-contrast-20260908`, based on deployed UI `3d
 
 ## Behavior
 
+Master-off correction: unchecking Auto now restores the underlying manual styling rather than freezing the automatic appearance. Both rectangle and callout failed the new regression before the fix. A real-browser before/on/off test verified that the restored canvas pixels exactly match the original manual colors, hatch and opacity. Evidence: `/tmp/auto-off-{red,green,browser,full,types,lint,build}.log`. The original freeze behavior described below is superseded for the master switch; Advanced individual locks remain unchanged.
+
+Correction verification: 143 test files passed (2,088 passed, 47 skipped, one todo); TypeScript and changed-file lint passed. The production browser also passed the pixel-restoration check. Port 5196 now serves `screenmark-shared-auto-eval:20260908-off-restore`; main and Fly are unchanged.
+
 Minimal-UI revision: only the Auto contrast master and a collapsed Advanced disclosure are visible initially. Individual overrides, fill opacity and explanatory statuses are inside Advanced. Changing selection closes Advanced. The master toggles all applicable fields together, and clicking a partial master enables all fields.
 
 One **Auto contrast** master switch with independent foreground, background and fill-opacity overrides. Mixed overrides are indicated. Callouts default on; text, rectangles, ellipses, diamonds, arrows and lines are opt-in. Unsupported elements are ignored, including in mixed selections. Bound labels route controls to their supported owner. Turning Auto off freezes displayed colors/fill opacity and removes the automatic halo. Manual palette edits lock just that field. Manual fill-opacity edits do not activate Auto or change hatch patterns.

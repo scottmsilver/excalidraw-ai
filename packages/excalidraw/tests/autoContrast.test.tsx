@@ -1,6 +1,11 @@
 import React from "react";
 import { MQ_MIN_WIDTH_DESKTOP } from "@excalidraw/common";
 import { newCalloutElement } from "@excalidraw/element";
+import {
+  getAutoContrastResolved,
+  getAutoContrastFillOpacity,
+} from "@excalidraw/element/autoContrast";
+import { generateRoughOptions } from "@excalidraw/element/shape";
 
 import { Excalidraw } from "../index";
 import { actionChangeStrokeColor } from "../actions/actionProperties";
@@ -12,6 +17,66 @@ import { act, fireEvent, render, screen, unmountComponent } from "./test-utils";
 
 const { h } = window;
 describe("shared Auto contrast controls", () => {
+  it("integrates a checkbox-free toggle with Colors and replaces palettes with live previews", () => {
+    const element = API.createElement({ type: "rectangle" });
+    API.setElements([element]);
+    API.setSelectedElements([element]);
+    const master = screen.getByRole("button", { name: "Auto contrast" });
+    const colors = screen.getByRole("group", { name: "Colors" });
+    expect(colors).toContainElement(master);
+    expect(colors.querySelector(".auto-contrast__manual")).toBeVisible();
+    fireEvent.click(master);
+    expect(master).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("Current stroke color")).toBeVisible();
+    expect(colors.querySelector(".auto-contrast__manual")).not.toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Advanced color settings" }),
+    );
+    expect(colors.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
+    expect(
+      screen.getByRole("button", { name: "Manual foreground" }),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Manual foreground" }));
+    expect(master).toHaveAttribute("aria-pressed", "mixed");
+    expect(colors.querySelector(".auto-contrast__manual")).toBeVisible();
+  });
+  it.each(["rectangle", "callout"] as const)(
+    "restores %s manual appearance when the master is unchecked",
+    (type) => {
+      const element = API.createElement({
+        type,
+        strokeColor: "#ff0000",
+        backgroundColor: "#00ff00",
+        fillStyle: "hachure",
+      });
+      API.setElements([element]);
+      API.setSelectedElements([element]);
+      if (
+        screen.getByLabelText("Auto contrast").getAttribute("aria-pressed") !==
+        "true"
+      ) {
+        fireEvent.click(screen.getByLabelText("Auto contrast"));
+      }
+      const before = {
+        strokeColor: h.elements[0].strokeColor,
+        backgroundColor: h.elements[0].backgroundColor,
+      };
+      const beforeOpacity = getAutoContrastFillOpacity(h.elements[0]);
+      expect(getAutoContrastResolved(h.elements[0])).toBeDefined();
+      fireEvent.click(screen.getByLabelText("Auto contrast"));
+      expect(h.elements[0]).toMatchObject(before);
+      expect(getAutoContrastFillOpacity(h.elements[0])).toBe(beforeOpacity);
+      expect(getAutoContrastResolved(h.elements[0])).toBeUndefined();
+      expect(h.elements[0].fillStyle).toBe("hachure");
+      expect(generateRoughOptions(h.elements[0])).toMatchObject({
+        stroke: "#ff0000",
+        fillStyle: "hachure",
+      });
+      fireEvent.click(screen.getByLabelText("Auto contrast"));
+      fireEvent.click(screen.getByLabelText("Auto contrast"));
+      expect(h.elements[0]).toMatchObject(before);
+    },
+  );
   it("shows only the master switch until Advanced is opened", () => {
     const element = API.createElement({ type: "rectangle" });
     API.setElements([element]);
@@ -20,20 +85,40 @@ describe("shared Auto contrast controls", () => {
     expect(screen.getByLabelText("Auto foreground")).not.toBeVisible();
     expect(screen.getByLabelText("Auto background")).not.toBeVisible();
     expect(screen.getByLabelText("Fill opacity")).not.toBeVisible();
-    fireEvent.click(screen.getByText("Advanced", { exact: true }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Advanced color settings" }),
+    );
     expect(screen.getByLabelText("Auto foreground")).toBeVisible();
     fireEvent.click(screen.getByLabelText("Auto contrast"));
-    expect(screen.getByLabelText("Auto foreground")).toBeChecked();
-    expect(screen.getByLabelText("Auto background")).toBeChecked();
-    fireEvent.click(screen.getByLabelText("Auto foreground"));
+    expect(screen.getByLabelText("Auto foreground")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByLabelText("Auto background")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    fireEvent.click(screen.getByLabelText("Manual foreground"));
     fireEvent.click(screen.getByLabelText("Auto contrast"));
-    expect(screen.getByLabelText("Auto foreground")).toBeChecked();
+    expect(screen.getByLabelText("Auto foreground")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     fireEvent.click(screen.getByLabelText("Auto contrast"));
-    expect(screen.getByLabelText("Auto foreground")).not.toBeChecked();
-    expect(screen.getByLabelText("Auto background")).not.toBeChecked();
+    expect(screen.getByLabelText("Auto foreground")).not.toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByLabelText("Auto background")).not.toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     const next = API.createElement({ type: "ellipse" });
     API.setElements([next]);
     API.setSelectedElements([next]);
+    expect(screen.getByLabelText("Auto foreground")).not.toBeVisible();
+    API.setElements([element, next]);
+    API.setSelectedElements([element]);
     expect(screen.getByLabelText("Auto foreground")).not.toBeVisible();
   });
   it("creates an Auto shape's label with the owner's opacity rather than a stale tool opacity", async () => {
@@ -89,10 +174,19 @@ describe("shared Auto contrast controls", () => {
     });
     API.setElements([callout]);
     API.setSelectedElements([callout]);
-    expect(screen.getByLabelText("Auto contrast")).toBeChecked();
+    expect(screen.getByLabelText("Auto contrast")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     fireEvent.click(screen.getByLabelText("Auto contrast"));
-    expect(screen.getByLabelText("Auto foreground")).not.toBeChecked();
-    expect(screen.getByLabelText("Auto background")).not.toBeChecked();
+    expect(screen.getByLabelText("Auto foreground")).not.toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByLabelText("Auto background")).not.toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it.each([
@@ -112,13 +206,22 @@ describe("shared Auto contrast controls", () => {
     });
     API.setElements([element]);
     API.setSelectedElements([element]);
-    expect(screen.getByLabelText("Auto contrast")).not.toBeChecked();
+    expect(screen.getByLabelText("Auto contrast")).not.toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     fireEvent.click(screen.getByLabelText("Auto contrast"));
-    expect(screen.getByLabelText("Auto foreground")).toBeChecked();
+    expect(screen.getByLabelText("Auto foreground")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     if (["text", "line", "arrow"].includes(type)) {
       expect(screen.queryByLabelText("Auto background")).toBeNull();
     } else {
-      expect(screen.getByLabelText("Auto background")).toBeChecked();
+      expect(screen.getByLabelText("Auto background")).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
     }
   });
 
@@ -132,10 +235,19 @@ describe("shared Auto contrast controls", () => {
         currentItemStrokeColor: "#ff0000",
       }),
     );
-    expect(screen.getByLabelText("Auto foreground")).not.toBeChecked();
-    expect(screen.getByLabelText("Auto background")).toBeChecked();
+    expect(screen.getByLabelText("Auto foreground")).not.toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByLabelText("Auto background")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     Keyboard.undo();
-    expect(screen.getByLabelText("Auto foreground")).toBeChecked();
+    expect(screen.getByLabelText("Auto foreground")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it("applies the switch to supported members of a mixed selection only", () => {
@@ -148,6 +260,11 @@ describe("shared Auto contrast controls", () => {
     expect(h.elements[0]).toHaveProperty("autoContrast.foreground", true);
     expect(h.elements[1]).toHaveProperty("autoContrast.foreground", true);
     expect(h.elements[2]).not.toHaveProperty("autoContrast");
+    expect(
+      screen
+        .getByRole("group", { name: "Colors" })
+        .querySelector(".auto-contrast__manual"),
+    ).toBeVisible();
   });
 
   it("routes bound-label controls and manual text color to the contrast owner", () => {
