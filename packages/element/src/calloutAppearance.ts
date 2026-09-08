@@ -1,5 +1,10 @@
 import { colorParsley } from "colorparsley";
 
+import {
+  getAutoContrastTextAppearance,
+  supportsAutoContrast,
+} from "./autoContrast";
+
 import type {
   ElementsMap,
   ExcalidrawElement,
@@ -86,16 +91,52 @@ export const calloutFillColor = (color: string, opacity: number) => {
   })`;
 };
 
+export const restoreAutoContrastAppearance = (
+  element: ExcalidrawElement,
+): Pick<
+  ExcalidrawElement,
+  | "autoContrast"
+  | "autoContrastResolved"
+  | "autoContrastManualColors"
+  | "fillOpacity"
+> => {
+  if (!supportsAutoContrast(element)) {
+    return {};
+  }
+  const legacy = restoreCalloutAppearance({
+    ...("autoContrast" in element
+      ? { calloutAutoStyle: element.autoContrast }
+      : {}),
+    ...("autoContrastResolved" in element
+      ? { calloutResolvedStyle: element.autoContrastResolved }
+      : {}),
+    ...("autoContrastManualColors" in element
+      ? { calloutManualColors: element.autoContrastManualColors }
+      : {}),
+    ...("fillOpacity" in element
+      ? { calloutBackgroundOpacity: element.fillOpacity }
+      : {}),
+  } as ExcalidrawCalloutElement);
+  return {
+    ...("calloutAutoStyle" in legacy
+      ? { autoContrast: legacy.calloutAutoStyle }
+      : {}),
+    ...("calloutResolvedStyle" in legacy
+      ? { autoContrastResolved: legacy.calloutResolvedStyle }
+      : {}),
+    ...("calloutManualColors" in legacy
+      ? { autoContrastManualColors: legacy.calloutManualColors }
+      : {}),
+    ...("calloutBackgroundOpacity" in legacy
+      ? { fillOpacity: legacy.calloutBackgroundOpacity }
+      : {}),
+  };
+};
+
 /** Resolved colors already describe displayed pixels, including the scene theme. */
 export const getCalloutTextColor = (
   element: ExcalidrawElement,
   elementsMap: ElementsMap,
 ) => {
-  const container =
-    element.type === "text" && element.containerId
-      ? elementsMap.get(element.containerId)
-      : null;
-  return container?.type === "callout"
-    ? container.calloutResolvedStyle?.foreground
-    : undefined;
+  return getAutoContrastTextAppearance(element, elementsMap)?.foreground;
 };

@@ -38,6 +38,8 @@ import { ShapeCache } from "@excalidraw/element";
 import { getElementAbsoluteCoords } from "@excalidraw/element";
 
 import { getCalloutTextColor } from "@excalidraw/element/calloutAppearance";
+import { getAutoContrastTextAppearance } from "@excalidraw/element/autoContrast";
+import { getAutoContrastHaloShape } from "@excalidraw/element/shape";
 
 import type {
   ExcalidrawElement,
@@ -157,6 +159,13 @@ const renderElementToSvg = (
         shape,
         MAX_DECIMALS_FOR_SVG_EXPORT,
       );
+      const halo = getAutoContrastHaloShape(element, shape);
+      if (halo) {
+        node.insertBefore(
+          roughSVGDrawWithPrecision(rsvg, halo, MAX_DECIMALS_FOR_SVG_EXPORT),
+          node.firstChild,
+        );
+      }
       if (opacity !== 1) {
         node.setAttribute("stroke-opacity", `${opacity}`);
         node.setAttribute("fill-opacity", `${opacity}`);
@@ -727,6 +736,16 @@ const renderElementToSvg = (
           text.setAttribute("y", `${i * lineHeightPx + verticalOffset}`);
           text.setAttribute("font-family", getFontFamilyString(element));
           text.setAttribute("font-size", `${element.fontSize}px`);
+          const halo = getAutoContrastTextAppearance(
+            element,
+            elementsMap,
+          )?.halo;
+          if (halo) {
+            text.setAttribute("stroke", halo);
+            text.setAttribute("stroke-width", "3");
+            text.setAttribute("stroke-linejoin", "round");
+            text.setAttribute("paint-order", "stroke fill");
+          }
           text.setAttribute(
             "fill",
             getCalloutTextColor(element, elementsMap) ??

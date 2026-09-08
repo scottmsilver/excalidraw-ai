@@ -44,6 +44,8 @@ import type {
 
 import { getElementAbsoluteCoords, getElementBounds } from "./bounds";
 import { getCalloutTextColor } from "./calloutAppearance";
+import { getAutoContrastTextAppearance } from "./autoContrast";
+import { getAutoContrastHaloShape } from "./shape";
 import { getUncroppedImageElement } from "./cropElement";
 import { LinearElementEditor } from "./linearElementEditor";
 import {
@@ -364,7 +366,12 @@ const drawElementOnCanvas = (
       context.lineJoin = "round";
       context.lineCap = "round";
 
-      rc.draw(ShapeCache.generateElementShape(element, renderConfig));
+      const shape = ShapeCache.generateElementShape(element, renderConfig);
+      const halo = getAutoContrastHaloShape(element, shape);
+      if (halo) {
+        rc.draw(halo);
+      }
+      rc.draw(shape);
       break;
     }
     case "arrow":
@@ -552,6 +559,20 @@ const drawElementOnCanvas = (
         );
 
         for (let index = 0; index < lines.length; index++) {
+          const halo = getAutoContrastTextAppearance(
+            element,
+            elementsMap,
+          )?.halo;
+          if (halo) {
+            context.strokeStyle = halo;
+            context.lineWidth = 3;
+            context.lineJoin = "round";
+            context.strokeText(
+              lines[index],
+              horizontalOffset,
+              index * lineHeightPx + verticalOffset,
+            );
+          }
           context.fillText(
             lines[index],
             horizontalOffset,

@@ -49,6 +49,18 @@ type _ExcalidrawElementBase = Readonly<{
   roundness: null | { type: RoundnessType; value?: number };
   roughness: number;
   opacity: number;
+  autoContrast?: Readonly<{
+    foreground: boolean;
+    background: boolean;
+    opacity: boolean;
+  }>;
+  autoContrastResolved?: import("./calloutContrast").CalloutContrastResult;
+  autoContrastManualColors?: Readonly<{
+    foreground?: string;
+    background?: string;
+  }>;
+  /** Fill transparency, independent of foreground and overall element opacity. */
+  fillOpacity?: number;
   width: number;
   height: number;
   angle: Radians;

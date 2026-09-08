@@ -25,6 +25,7 @@ import { useTextEditorFocus } from "../hooks/useTextEditorFocus";
 import { actionToggleViewMode } from "../actions/actionToggleViewMode";
 
 import { CalloutStyleControls } from "./CalloutStyleControls";
+import { AutoContrastControls } from "./AutoContrastControls";
 
 import "./Actions.scss";
 
@@ -186,6 +187,7 @@ export const SelectedShapeActions = ({
 
   return (
     <div className="selected-shape-actions">
+      <AutoContrastControls elements={targetElements} app={app} />
       {singleCallout(targetElements) && (
         <CalloutStyleControls
           element={singleCallout(targetElements)!}
@@ -266,6 +268,10 @@ const CombinedShapeProperties = ({
   callout?: ExcalidrawElement;
   app: AppClassProperties;
 }) => {
+  const targetElements = getTargetElements(
+    app.scene.getNonDeletedElementsMap(),
+    appState,
+  );
   const shouldShowCombinedProperties =
     predicates.hasSelection ||
     (appState.activeTool.type !== "selection" &&
@@ -318,6 +324,7 @@ const CombinedShapeProperties = ({
             onClose={() => {}}
           >
             <div className="selected-shape-actions">
+              <AutoContrastControls elements={targetElements} app={app} />
               {callout?.type === "callout" && (
                 <CalloutStyleControls element={callout} app={app} />
               )}

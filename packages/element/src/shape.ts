@@ -68,6 +68,11 @@ import { shouldTestInside } from "./collision";
 
 import { getCalloutTailPoints, getCalloutTailArrowheadPoints } from "./callout";
 import { calloutFillColor } from "./calloutAppearance";
+import {
+  getAutoContrastResolved,
+  getAutoContrastFillOpacity,
+  hasAutoContrastFill,
+} from "./autoContrast";
 
 import type {
   ExcalidrawElement,
@@ -194,6 +199,25 @@ function adjustRoughness(element: ExcalidrawElement): number {
   return Math.min(roughness / (maxSize < 10 ? 3 : 2), 2.5);
 }
 
+export const getAutoContrastHaloShape = (
+  element: ExcalidrawElement,
+  shape: Drawable,
+): Drawable | undefined => {
+  const halo = getAutoContrastResolved(element)?.halo;
+  return halo
+    ? {
+        ...shape,
+        options: {
+          ...shape.options,
+          stroke: halo,
+          strokeWidth: shape.options.strokeWidth + 3,
+          fill: undefined,
+        },
+        sets: shape.sets.filter((set) => set.type === "path"),
+      }
+    : undefined;
+};
+
 export const generateRoughOptions = (
   element: ExcalidrawElement,
   continuousPath = false,
@@ -222,7 +246,9 @@ export const generateRoughOptions = (
     fillWeight: element.strokeWidth / 2,
     hachureGap: element.strokeWidth * 4,
     roughness: adjustRoughness(element),
-    stroke: applyDarkModeFilter(element.strokeColor, isDarkMode),
+    stroke:
+      getAutoContrastResolved(element)?.foreground ??
+      applyDarkModeFilter(element.strokeColor, isDarkMode),
     preserveVertices:
       continuousPath || element.roughness < ROUGHNESS.cartoonist,
   };
@@ -240,6 +266,22 @@ export const generateRoughOptions = (
         : applyDarkModeFilter(element.backgroundColor, isDarkMode);
       if (element.type === "ellipse") {
         options.curveFitting = 1;
+      }
+      if (
+        hasAutoContrastFill(element) &&
+        (getAutoContrastResolved(element) ||
+          element.fillOpacity !== undefined ||
+          (element.type === "callout" &&
+            element.calloutBackgroundOpacity !== undefined))
+      ) {
+        const resolved = getAutoContrastResolved(element);
+        options.fill = calloutFillColor(
+          resolved?.background ?? options.fill ?? "transparent",
+          resolved?.backgroundOpacity ?? getAutoContrastFillOpacity(element),
+        );
+        if (resolved) {
+          options.fillStyle = "solid";
+        }
       }
       return options;
     }
@@ -386,7 +428,8 @@ const getArrowheadShapes = (
     return [];
   }
 
-  const strokeColor = applyDarkModeFilter(element.strokeColor, isDarkMode);
+  const strokeColor =
+    options.stroke ?? applyDarkModeFilter(element.strokeColor, isDarkMode);
   const backgroundFillColor = applyDarkModeFilter(
     canvasBackgroundColor,
     isDarkMode,
@@ -958,7 +1001,10 @@ const _generateElementShape = (
           shape.push(...shapes);
         }
       }
-      return shape;
+      const halos = shape
+        .map((drawable) => getAutoContrastHaloShape(element, drawable))
+        .filter((drawable): drawable is Drawable => !!drawable);
+      return [...halos, ...shape];
     }
     case "freedraw": {
       // oredered in terms of z-index [background, stroke]
@@ -996,20 +1042,7 @@ const _generateElementShape = (
     case "callout": {
       const shapes: ElementShapes[typeof element.type] = [];
       const options = generateRoughOptions(element, false, isDarkMode);
-      const resolved = element.calloutResolvedStyle;
-      if (resolved) {
-        options.stroke = resolved.foreground;
-        options.fill = calloutFillColor(
-          resolved.background,
-          resolved.backgroundOpacity,
-        );
-        options.fillStyle = "solid";
-      } else if (element.calloutBackgroundOpacity !== undefined) {
-        options.fill = calloutFillColor(
-          options.fill || "transparent",
-          element.calloutBackgroundOpacity,
-        );
-      }
+      const resolved = getAutoContrastResolved(element);
 
       // Generate rectangle body (similar to rectangle case)
       if (element.roundness) {

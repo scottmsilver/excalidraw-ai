@@ -1,4 +1,6 @@
 import { pointFrom } from "@excalidraw/math";
+import { lockAutoContrastColor } from "@excalidraw/element/autoContrastUpdates";
+import { getAutoContrastModes } from "@excalidraw/element/autoContrast";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -187,12 +189,29 @@ export const changeProperty = (
   appState: AppState,
   callback: (element: NonDeletedExcalidrawElement) => ExcalidrawElement,
   includeBoundText = false,
+  includeAutoContrastOwners = false,
 ) => {
   const selectedElementIds = arrayToMap(
     getSelectedElements(elements, appState, {
       includeBoundTextElement: includeBoundText,
     }),
   );
+
+  if (includeAutoContrastOwners) {
+    const elementsMap = arrayToMap(elements);
+    for (const element of [
+      ...selectedElementIds.values(),
+      appState.editingTextElement,
+    ]) {
+      const owner =
+        element?.type === "text" && element.containerId
+          ? elementsMap.get(element.containerId)
+          : undefined;
+      if (owner && !owner.isDeleted && getAutoContrastModes(owner)) {
+        selectedElementIds.set(owner.id, owner as NonDeletedExcalidrawElement);
+      }
+    }
+  }
 
   return elements.map((element) => {
     if (
@@ -358,21 +377,11 @@ export const actionChangeStrokeColor = register<
             return hasStrokeColor(el.type)
               ? newElementWith(el, {
                   strokeColor: value.currentItemStrokeColor,
-                  ...(isCalloutElement(el) && el.calloutAutoStyle
-                    ? {
-                        calloutAutoStyle: {
-                          ...el.calloutAutoStyle,
-                          foreground: false,
-                        },
-                        calloutManualColors: {
-                          ...el.calloutManualColors,
-                          foreground: undefined,
-                        },
-                      }
-                    : {}),
+                  ...lockAutoContrastColor(el, "foreground"),
                 })
               : el;
           },
+          true,
           true,
         ),
       }),
@@ -458,15 +467,7 @@ export const actionChangeBackgroundColor = register<
       nextElements = changeProperty(elements, appState, (el) =>
         newElementWith(el, {
           backgroundColor: value.currentItemBackgroundColor,
-          ...(isCalloutElement(el) && el.calloutAutoStyle
-            ? {
-                calloutAutoStyle: { ...el.calloutAutoStyle, background: false },
-                calloutManualColors: {
-                  ...el.calloutManualColors,
-                  background: undefined,
-                },
-              }
-            : {}),
+          ...lockAutoContrastColor(el, "background"),
         }),
       );
     }

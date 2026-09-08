@@ -271,6 +271,8 @@ import {
   isPointOnCalloutShaft,
 } from "@excalidraw/element/calloutTransform";
 
+import { getAutoContrastModes } from "@excalidraw/element/autoContrast";
+
 import type { GlobalPoint, LocalPoint, Radians } from "@excalidraw/math";
 
 import type {
@@ -422,7 +424,7 @@ import {
   isGridModeEnabled,
 } from "../snapping";
 import { Renderer } from "../scene/Renderer";
-import { CalloutAutoStyleController } from "../scene/calloutAutoStyle";
+import { AutoContrastController } from "../scene/calloutAutoStyle";
 import {
   type SetViewportOptions,
   getViewportForZoomWithScrollConstraints,
@@ -4211,7 +4213,7 @@ class App extends React.Component<AppProps, AppState> {
     }
   }
 
-  private calloutAutoStyles = new CalloutAutoStyleController();
+  private autoContrastStyles = new AutoContrastController();
 
   componentDidUpdate(prevProps: AppProps, prevState: AppState) {
     // must be updated *before* state change listeners are triggered below
@@ -4390,7 +4392,7 @@ class App extends React.Component<AppProps, AppState> {
     }
 
     if (
-      this.calloutAutoStyles.resolve(
+      this.autoContrastStyles.resolve(
         this.scene.getNonDeletedElements(),
         this.state,
         this.imageCache,
@@ -7033,9 +7035,7 @@ class App extends React.Component<AppProps, AppState> {
         strokeStyle: this.state.currentItemStrokeStyle,
         roughness: this.state.currentItemRoughness,
         opacity:
-          shouldBindToContainer &&
-          container?.type === "callout" &&
-          container.calloutAutoStyle
+          shouldBindToContainer && container && getAutoContrastModes(container)
             ? container.opacity
             : this.state.currentItemOpacity,
         text: "",

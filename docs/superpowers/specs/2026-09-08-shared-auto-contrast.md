@@ -1,0 +1,9 @@
+# Shared Auto contrast
+
+User-approved design: one **Auto contrast** switch per supported shape, with independent foreground, background and fill-opacity overrides. On for new callouts; opt-in for text, rectangles, ellipses, diamonds, arrows and lines. Unsupported elements (including images) are unchanged. Only applicable controls are shown. Multi-selection applies changes to supported annotation owners, not independently to their bound labels.
+
+Switching on enables all applicable fields. A manual color/opacity choice locks only that field. Switching off freezes the current displayed colors/fill opacity; the UI indicates partial Auto when overrides are mixed. Auto continues sampling underlying artwork during gestures. Existing callout settings and old manual drawings retain their behavior. Standalone text and strokes may receive an opposite-color halo when mixed artwork prevents a single color from being readable.
+
+Sampling uses actual lower-z composited artwork and shape-specific points: text bounds, interiors/perimeters of closed shapes, and stroke paths for lines/arrows. Do not recolor images or fade foreground text through fill opacity. Canvas, SVG/PNG exports and the text editor must agree. Derived appearance updates must not add undo steps; explicit switch/override edits must be undoable. Cache unchanged inputs and invalidate downstream sampling when an earlier Auto element changes its resolved appearance.
+
+Compatibility architecture: optional shared `autoContrast`, `autoContrastResolved`, `autoContrastManualColors`, and `fillOpacity` fields. Legacy callout fields remain supported by shared accessors, without rewriting every old document. Supported types are explicit. Rendering/sampling use the same accessors. New callouts may retain the old default metadata internally for compatibility; the controls present the shared name.

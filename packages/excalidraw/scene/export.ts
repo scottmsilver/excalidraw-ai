@@ -39,6 +39,8 @@ import { type Mutable } from "@excalidraw/common/utility-types";
 
 import { newTextElement } from "@excalidraw/element";
 
+import { getAutoContrastModes } from "@excalidraw/element/autoContrast";
+
 import type { Bounds } from "@excalidraw/common";
 
 import type {
@@ -226,9 +228,7 @@ export const exportToCanvas = async (
     exportWithDarkMode: appState.exportWithDarkMode,
     frameRendering,
   }).map((element) =>
-    element.type === "callout" && element.calloutAutoStyle
-      ? { ...element }
-      : element,
+    getAutoContrastModes(element) ? { ...element } : element,
   );
 
   if (exportingFrame) {
@@ -352,9 +352,7 @@ export const exportToSvg = async (
     exportWithDarkMode,
     frameRendering,
   }).map((element) =>
-    element.type === "callout" && element.calloutAutoStyle
-      ? { ...element }
-      : element,
+    getAutoContrastModes(element) ? { ...element } : element,
   );
 
   if (exportingFrame) {
@@ -375,11 +373,7 @@ export const exportToSvg = async (
 
   const svgRoot = document.createElementNS(SVG_NS, "svg");
 
-  if (
-    elementsForRender.some(
-      (element) => element.type === "callout" && element.calloutAutoStyle,
-    )
-  ) {
+  if (elementsForRender.some((element) => getAutoContrastModes(element))) {
     const { imageCache } = await updateImageCache({
       imageCache: new Map(),
       fileIds: getInitializedImageElements(elementsForRender).map(

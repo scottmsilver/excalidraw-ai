@@ -5,6 +5,8 @@ import {
   newElement,
   newFrameElement,
   newImageElement,
+  newLinearElement,
+  newTextElement,
 } from "@excalidraw/element";
 
 import { getDefaultAppState as defaults } from "../appState";
@@ -24,6 +26,173 @@ const getDefaultAppState = () => ({
 });
 
 describe("callout artwork sampling", () => {
+  it("contrasts closed line strokes against their existing manual fill", () => {
+    const line = Object.assign(
+      newLinearElement({
+        type: "line",
+        x: 0,
+        y: 0,
+        points: [
+          [0, 0],
+          [100, 0],
+          [100, 100],
+          [0, 0],
+        ] as any,
+        backgroundColor: "#000000",
+        fillStyle: "solid",
+      }),
+      { autoContrast: { foreground: true, background: false, opacity: false } },
+    );
+    const sampler = () => ({
+      box: [[255, 255, 255] as const],
+      edge: [[255, 255, 255] as const],
+    });
+    new CalloutAutoStyleController(sampler).resolve(
+      [line],
+      getDefaultAppState(),
+      new Map(),
+      document,
+    );
+    expect(line).toHaveProperty("autoContrastResolved.foreground", "#ffffff");
+    expect(line.backgroundColor).toBe("#000000");
+  });
+  it("keeps text fill transparent and adds a halo when color alone misses its target", () => {
+    const sampler = vi.fn(() => ({
+      box: [[127, 127, 127] as const],
+      edge: [[127, 127, 127] as const],
+    }));
+    const text = Object.assign(
+      newTextElement({ x: 10, y: 10, text: "Readable", fontSize: 20 }),
+      { autoContrast: { foreground: true, background: false, opacity: false } },
+    );
+    new CalloutAutoStyleController(sampler).resolve(
+      [text],
+      getDefaultAppState(),
+      new Map(),
+      document,
+    );
+    expect(text).toHaveProperty("autoContrastResolved.backgroundOpacity", 0);
+    expect((text as any).autoContrastResolved.halo).not.toBeNull();
+  });
+
+  it("invalidates downstream Auto when lower resolved pixels change without a version bump", () => {
+    const sampler = vi.fn(() => ({
+      box: [[255, 255, 255] as const],
+      edge: [],
+    }));
+    const lower = Object.assign(newElement({ type: "rectangle", x: 0, y: 0 }), {
+      autoContrast: { foreground: true, background: true, opacity: true },
+    });
+    const upper = Object.assign(
+      newElement({ type: "rectangle", x: 10, y: 10 }),
+      { autoContrast: { foreground: true, background: true, opacity: true } },
+    );
+    const controller = new CalloutAutoStyleController(sampler);
+    const state = getDefaultAppState();
+    controller.resolve([lower, upper], state, new Map(), document);
+    expect(sampler).toHaveBeenCalledTimes(2);
+    controller.resolve([lower, upper], state, new Map(), document);
+    expect(sampler).toHaveBeenCalledTimes(2);
+    Object.assign(lower, {
+      autoContrastResolved: {
+        ...(lower as any).autoContrastResolved,
+        foreground: "#ff0000",
+      },
+    });
+    controller.resolve([lower, upper], state, new Map(), document);
+    expect(sampler).toHaveBeenCalledTimes(3);
+  });
+  it("includes the bound label area when sampling an arrow", () => {
+    const arrow = newLinearElement({
+      type: "arrow",
+      x: 100,
+      y: 100,
+      width: 100,
+      height: 0,
+      points: [
+        [0, 0],
+        [100, 0],
+      ] as any,
+    });
+    const label = newTextElement({
+      x: 100,
+      y: 100,
+      text: "A label extending beyond its arrow",
+      fontSize: 20,
+      fontFamily: 1,
+      textAlign: "center",
+      verticalAlign: "middle",
+      containerId: arrow.id,
+    });
+    Object.assign(arrow, { boundElements: [{ id: label.id, type: "text" }] });
+    const withoutLabel = sampleCalloutScene(
+      arrow,
+      [arrow],
+      getDefaultAppState(),
+      new Map(),
+      document,
+    );
+    const withLabel = sampleCalloutScene(
+      arrow,
+      [arrow, label],
+      getDefaultAppState(),
+      new Map(),
+      document,
+    );
+    expect(withLabel.box.length).toBeGreaterThan(withoutLabel.box.length);
+    expect(withLabel.edge.length).toBeGreaterThan(withoutLabel.edge.length);
+  });
+  it("resolves opt-in rectangles continuously without changing their versions", () => {
+    let black = false;
+    const sampler = vi.fn(() => ({
+      box: [black ? ([0, 0, 0] as const) : ([255, 255, 255] as const)],
+      edge: [],
+    }));
+    const controller = new CalloutAutoStyleController(sampler);
+    const rectangle = Object.assign(
+      newElement({ type: "rectangle", x: 10, y: 10 }),
+      { autoContrast: { foreground: true, background: true, opacity: true } },
+    );
+    const state = { ...getDefaultAppState(), cursorButton: "down" as const };
+    const version = rectangle.version;
+    expect(controller.resolve([rectangle], state, new Map(), document)).toBe(
+      true,
+    );
+    expect(rectangle).toHaveProperty(
+      "autoContrastResolved.foreground",
+      "#000000",
+    );
+    black = true;
+    controller.resolve(
+      [rectangle],
+      { ...state, viewBackgroundColor: "#000000" },
+      new Map(),
+      document,
+    );
+    expect(rectangle).toHaveProperty(
+      "autoContrastResolved.foreground",
+      "#ffffff",
+    );
+    expect(rectangle.version).toBe(version);
+  });
+
+  it("does not activate old manual shapes", () => {
+    const sampler = vi.fn(() => ({
+      box: [[255, 255, 255] as const],
+      edge: [],
+    }));
+    const rectangle = newElement({ type: "rectangle", x: 10, y: 10 });
+    expect(
+      new CalloutAutoStyleController(sampler).resolve(
+        [rectangle],
+        getDefaultAppState(),
+        new Map(),
+        document,
+      ),
+    ).toBe(false);
+    expect(sampler).not.toHaveBeenCalled();
+  });
+
   it("resamples when frame clipping changes without an element edit", () => {
     const sampler = vi.fn(() => ({
       box: [[255, 255, 255] as const],

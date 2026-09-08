@@ -40,7 +40,10 @@ import {
   isNonDeletedElement,
 } from "@excalidraw/element";
 import { normalizeFixedPoint } from "@excalidraw/element";
-import { restoreCalloutAppearance } from "@excalidraw/element/calloutAppearance";
+import {
+  restoreCalloutAppearance,
+  restoreAutoContrastAppearance,
+} from "@excalidraw/element/calloutAppearance";
 import {
   updateElbowArrowPoints,
   validateElbowPoints,
@@ -419,14 +422,23 @@ const repairBinding = <T extends ExcalidrawArrowElement>(
   return null;
 };
 
+type OptionalAppearanceKeys =
+  | "autoContrast"
+  | "autoContrastResolved"
+  | "autoContrastManualColors"
+  | "fillOpacity";
+
 const restoreElementWithProperties = <
-  T extends Required<Omit<ExcalidrawElement, "customData">> & {
-    customData?: ExcalidrawElement["customData"];
-    /** @deprecated */
-    boundElementIds?: readonly ExcalidrawElement["id"][];
-    /** @deprecated */
-    strokeSharpness?: StrokeRoundness;
-  },
+  T extends Required<
+    Omit<ExcalidrawElement, "customData" | OptionalAppearanceKeys>
+  > &
+    Pick<ExcalidrawElement, OptionalAppearanceKeys> & {
+      customData?: ExcalidrawElement["customData"];
+      /** @deprecated */
+      boundElementIds?: readonly ExcalidrawElement["id"][];
+      /** @deprecated */
+      strokeSharpness?: StrokeRoundness;
+    },
   K extends Pick<T, keyof Omit<Required<T>, keyof ExcalidrawElement>>,
 >(
   element: T,
@@ -438,7 +450,10 @@ const restoreElementWithProperties = <
   > &
     Partial<Pick<ExcalidrawElement, "type" | "x" | "y" | "customData">>,
 ): T => {
-  const base: Pick<T, keyof ExcalidrawElement> = {
+  const base: Pick<
+    T,
+    Exclude<keyof ExcalidrawElement, OptionalAppearanceKeys>
+  > = {
     type: extra.type || element.type,
     // all elements must have version > 0 so getSceneVersion() will pick up
     // newly added elements
@@ -516,7 +531,7 @@ export const restoreElement = (
     deleteInvisibleElements?: boolean;
   },
 ): typeof element | null => {
-  element = { ...element };
+  element = { ...element, ...restoreAutoContrastAppearance(element) };
 
   switch (element.type) {
     case "text":

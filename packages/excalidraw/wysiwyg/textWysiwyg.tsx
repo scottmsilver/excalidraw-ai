@@ -49,6 +49,7 @@ import {
 } from "@excalidraw/element";
 
 import { getCalloutTextColor } from "@excalidraw/element/calloutAppearance";
+import { getAutoContrastTextAppearance } from "@excalidraw/element/autoContrast";
 
 import type {
   ExcalidrawLinearElement,
@@ -425,6 +426,18 @@ export const textWysiwyg = ({
             appState.theme === THEME.DARK,
           ),
         opacity: updatedTextElement.opacity / 100,
+        webkitTextStroke: getAutoContrastTextAppearance(
+          updatedTextElement,
+          app.scene.getNonDeletedElementsMap(),
+        )?.halo
+          ? `3px ${
+              getAutoContrastTextAppearance(
+                updatedTextElement,
+                app.scene.getNonDeletedElementsMap(),
+              )!.halo
+            }`
+          : "",
+        paintOrder: "stroke fill",
         maxHeight: `${editorMaxHeight}px`,
       });
       currentTextLayout = {
