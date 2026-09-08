@@ -8,7 +8,7 @@ Implemented on `feature/anchored-auto-callouts-20260908`, based on `22b186d0` / 
 - Box + arrow selection transforms the whole callout, including grouped/frame-child movement, duplication and flips. Dragging a selected whole callout preserves that intent; a simple box click switches back to box-only.
 - New callouts use independently selectable Auto foreground, background and body-fill opacity. The lower-z rendered artwork is sampled before choosing colors/opacity with the unmodified `apca-w3` implementation. Foreground and newly bound text start opaque.
 - Manual fields remain locked; old callouts without Auto metadata retain their appearance. Dark-mode colors, fallback status and low-contrast notices are supported. Derived appearance does not increment element versions or add undo entries.
-- Canvas, text editing, SVG, PNG and annotation exports use resolved appearance. Export resolution uses clones; interactive sampling is deferred during gestures and invalidated by relevant scene/image/font/frame-rendering changes.
+- Canvas, text editing, SVG, PNG and annotation exports use resolved appearance. Export resolution uses clones; interactive sampling responds throughout gestures and is invalidated by relevant scene/image/font/frame-rendering changes.
 
 ## Verification
 
@@ -36,3 +36,11 @@ yarn test:typecheck
 Browser scripts, logs, screenshots and exported SVG/PNG evidence are archived locally at `/home/ssilver/development/snapshot-ai-callout-verification-20260908.tar.gz`. The isolated development server uses port 5194; the built production preview uses port 5196. The user's existing local app on port 5192 is unchanged.
 
 Beads was unavailable for this isolated clone; no shared issue database was initialized or reset. Remote Mac offload was unreachable, so verification ran locally.
+
+## Continuous Auto follow-up
+
+Removed the pointer-gesture pause at the user's request. Auto now samples changed artwork during interaction, retaining fingerprint deduplication and manual-field locks. The updated sampling regression failed before the fix and passed afterward; the focused 67-test suite, TypeScript, and changed-file lint passed. The full `yarn test:update` run passed all 141 test files (2,056 tests passed, 47 skipped, one todo), with no snapshot changes. Independent review found no blockers and separately passed all eight sampling tests.
+
+A real-browser regression dragged black artwork underneath a stationary callout and away again without releasing the mouse. Auto changed foreground in both directions before pointer release, with no callout version change or browser errors. Reproduction: `/tmp/current-upstream-browser.KCSede/callout-live-smoke.cjs`; screenshot: `/tmp/current-upstream-browser.KCSede/callout-live-underneath.png`; logs: `/tmp/callout-live-{red,green,browser,full,types,lint,build}.log`.
+
+The production image was rebuilt and the isolated port-5196 preview refreshed. Its browser smoke test passed callout creation, bound-text editing, corner attachment, reload, and rectangle/lasso/polygon captures with no browser errors (`/tmp/callout-live-production-browser.log`). The prior preview container is retained, stopped, as `screenmark-callout-eval-20260908-before-live-auto`; main and the live deployment were not changed.

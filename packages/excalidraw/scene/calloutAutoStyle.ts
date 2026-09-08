@@ -48,13 +48,7 @@ export class CalloutAutoStyleController {
     if (
       !elements.some(
         (element) => element.type === "callout" && element.calloutAutoStyle,
-      ) ||
-      (!force &&
-        (state.selectedElementsAreBeingDragged ||
-          state.isResizing ||
-          state.isRotating ||
-          state.newElement ||
-          state.cursorButton === "down"))
+      )
     ) {
       return false;
     }

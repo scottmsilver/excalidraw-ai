@@ -140,7 +140,7 @@ describe("callout artwork sampling", () => {
     expect(args.elementsMap.get(frame.id)).toMatchObject({ id: frame.id });
     expect(args.visibleElements).toEqual([below]);
   });
-  it("defers interactions, resolves once afterward, and does not create version/undo changes", () => {
+  it("resolves during interactions without repeating unchanged work or adding undo changes", () => {
     const sampler = vi.fn(() => ({
       box: [[255, 255, 255] as const],
       edge: [[255, 255, 255] as const],
@@ -156,10 +156,10 @@ describe("callout artwork sampling", () => {
         new Map(),
         document,
       ),
-    ).toBe(false);
-    expect(sampler).not.toHaveBeenCalled();
+    ).toBe(true);
+    expect(sampler).toHaveBeenCalledTimes(1);
     expect(controller.resolve([callout], state, new Map(), document)).toBe(
-      true,
+      false,
     );
     expect(callout.calloutResolvedStyle?.foreground).toBe("#000000");
     expect(callout.version).toBe(version);

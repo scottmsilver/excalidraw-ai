@@ -33,9 +33,9 @@ Files: new `packages/element/src/calloutContrast.ts`, `packages/element/tests/ca
 
 Files: new `packages/excalidraw/components/CalloutStyleControls.tsx`, new `packages/excalidraw/scene/calloutAutoStyle.ts`; editor App lifecycle, existing color/opacity actions; `packages/element/src/{shape,renderElement,mutateElement}.ts`, `packages/excalidraw/renderer/staticSvgScene.ts`, bound text editor/render paths and `packages/utils/src/export.ts` as required.
 
-1. Write failing sampler/scheduling/UI tests: lower-z artwork only, target+boundtext excluded, image-backed pixels, deferred drag sampling, stale result cancellation, no self-trigger loop, manual value disables only matching Auto mode, legacy styles unaffected.
+1. Write failing sampler/scheduling/UI tests: lower-z artwork only, target+boundtext excluded, image-backed pixels, live drag sampling, stale result cancellation, no self-trigger loop, manual value disables only matching Auto mode, legacy styles unaffected.
 2. Render underlying scene into a bounded offscreen canvas using ownerDocument; map rotated box/interior/perimeter/tail samples into it. Sample actual crops/alpha/theme, not original image bytes alone.
-3. Resolve after geometry/scene/file changes, preserve last result during interaction, and coalesce work. Update resolved fields and bound text coherently without standalone undo/history entries; avoid overwriting manual fields or older undo/document state.
+3. Resolve after geometry/scene/file changes, including during interaction, and cache unchanged inputs. Update resolved fields and bound text coherently without standalone undo/history entries; avoid overwriting manual fields or older undo/document state.
 4. Add independent Auto controls and background-only opacity; low-contrast/fallback status. Preserve legacy overall opacity semantics.
 5. Apply fill alpha only to body fill; opaque auto foreground including text; optional arrow/outline halo. Share resolved appearance with SVG/PNG/AI exports and text editing overlay. Ensure export flushes needed resolution with bounded fallback and no recursive sampling.
 6. Verify rendering and export tests and focused browser interactions before broad validation.
