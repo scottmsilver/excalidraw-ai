@@ -488,6 +488,17 @@ export const restoreElement = (
       };
     }
 
+    case "callout":
+      return restoreElementWithProperties(element, {
+        tailAttachment: element.tailAttachment ?? 0.625,
+        tailTip:
+          element.tailTip ??
+          pointFrom<LocalPoint>(element.width / 2, element.height + 40),
+        tailCurve: element.tailCurve ?? 0.3,
+        tailArrowhead:
+          element.tailArrowhead === undefined ? "arrow" : element.tailArrowhead,
+      });
+
     // generic elements
     case "ellipse":
     case "rectangle":

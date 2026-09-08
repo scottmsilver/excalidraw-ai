@@ -1,8 +1,10 @@
-import type { LocalPoint, Radians } from "@excalidraw/math";
 import { pointFrom, pointRotateRads } from "@excalidraw/math";
 
-import type { Arrowhead, ExcalidrawCalloutElement } from "./types";
+import type { LocalPoint, Radians } from "@excalidraw/math";
+
 import { getArrowheadSize, getArrowheadAngle } from "./bounds";
+
+import type { ExcalidrawCalloutElement } from "./types";
 
 /**
  * Perimeter ratio system for callout tail attachment.
@@ -141,10 +143,9 @@ export const getPerimeterNormal = (
   } else if (normalizedRatio < bottomEnd) {
     // Bottom edge: normal points down
     return pointFrom<LocalPoint>(0, 1);
-  } else {
-    // Left edge: normal points left
-    return pointFrom<LocalPoint>(-1, 0);
   }
+  // Left edge: normal points left
+  return pointFrom<LocalPoint>(-1, 0);
 };
 
 /**
@@ -187,10 +188,9 @@ export const pointToPerimeterRatio = (
   } else if (minDist === distToBottom) {
     // Bottom edge
     return rightEnd + ((width - clampedX) / width) * bottomRatio;
-  } else {
-    // Left edge
-    return bottomEnd + ((height - clampedY) / height) * (1 - bottomEnd);
   }
+  // Left edge
+  return bottomEnd + ((height - clampedY) / height) * (1 - bottomEnd);
 };
 
 /**
@@ -263,10 +263,23 @@ export const getCalloutTailBounds = (
 ): [number, number, number, number] => {
   const { attachPoint, controlPoint, tipPoint } = getCalloutTailPoints(element);
 
-  const minX = Math.min(attachPoint[0], controlPoint[0], tipPoint[0]);
-  const minY = Math.min(attachPoint[1], controlPoint[1], tipPoint[1]);
-  const maxX = Math.max(attachPoint[0], controlPoint[0], tipPoint[0]);
-  const maxY = Math.max(attachPoint[1], controlPoint[1], tipPoint[1]);
+  const xs = [attachPoint[0], controlPoint[0], tipPoint[0]];
+  const ys = [attachPoint[1], controlPoint[1], tipPoint[1]];
+  const arrowhead = getCalloutTailArrowheadPoints(element);
+  if (arrowhead?.length === 3) {
+    const [x, y, diameter] = arrowhead;
+    xs.push(x - diameter / 2, x + diameter / 2);
+    ys.push(y - diameter / 2, y + diameter / 2);
+  } else if (arrowhead) {
+    for (let i = 0; i < arrowhead.length; i += 2) {
+      xs.push(arrowhead[i]);
+      ys.push(arrowhead[i + 1]);
+    }
+  }
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  const maxX = Math.max(...xs);
+  const maxY = Math.max(...ys);
 
   return [minX, minY, maxX, maxY];
 };

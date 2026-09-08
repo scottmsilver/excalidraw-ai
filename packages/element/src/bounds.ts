@@ -48,7 +48,7 @@ import {
   isCalloutElement,
 } from "./typeChecks";
 
-import { getCalloutTailPoints } from "./callout";
+import { getCalloutTailBounds } from "./callout";
 
 import { getElementShape } from "./shape";
 
@@ -215,8 +215,9 @@ export class ElementBounds {
       const hh = Math.hypot(h * cos, w * sin);
       bounds = [cx - ww, cy - hh, cx + ww, cy + hh];
     } else if (isCalloutElement(element)) {
-      // Callout bounds include the rectangle body + tail tip
-      const { tipPoint } = getCalloutTailPoints(element);
+      // Include the curve's control hull and arrowhead, not just its tip.
+      const [tailMinX, tailMinY, tailMaxX, tailMaxY] =
+        getCalloutTailBounds(element);
 
       // Get rotated corners of the rectangle body
       const [x11, y11] = pointRotateRads(
@@ -240,18 +241,34 @@ export class ElementBounds {
         element.angle,
       );
 
-      // Get rotated tail tip (tipPoint is relative to element origin)
-      const [tipX, tipY] = pointRotateRads(
-        pointFrom(element.x + tipPoint[0], element.y + tipPoint[1]),
-        pointFrom(cx, cy),
-        element.angle,
+      const tailCorners = [
+        [tailMinX, tailMinY],
+        [tailMinX, tailMaxY],
+        [tailMaxX, tailMinY],
+        [tailMaxX, tailMaxY],
+      ].map(([x, y]) =>
+        pointRotateRads(
+          pointFrom(element.x + x, element.y + y),
+          pointFrom(cx, cy),
+          element.angle,
+        ),
       );
-
-      // Include tail tip in bounds
-      const minX = Math.min(x11, x12, x22, x21, tipX);
-      const minY = Math.min(y11, y12, y22, y21, tipY);
-      const maxX = Math.max(x11, x12, x22, x21, tipX);
-      const maxY = Math.max(y11, y12, y22, y21, tipY);
+      const minX = Math.min(x11, x12, x22, x21, ...tailCorners.map(([x]) => x));
+      const minY = Math.min(
+        y11,
+        y12,
+        y22,
+        y21,
+        ...tailCorners.map(([, y]) => y),
+      );
+      const maxX = Math.max(x11, x12, x22, x21, ...tailCorners.map(([x]) => x));
+      const maxY = Math.max(
+        y11,
+        y12,
+        y22,
+        y21,
+        ...tailCorners.map(([, y]) => y),
+      );
       bounds = [minX, minY, maxX, maxY];
     } else {
       const [x11, y11] = pointRotateRads(
