@@ -42,17 +42,18 @@ describe("restored callout tool", () => {
     API.setAppState({ height: 768, width: MQ_MIN_WIDTH_DESKTOP });
   });
 
-  it("exposes the toolbar tool and creates a callout with C", () => {
+  it("exposes the toolbar tool and creates a callout with C", async () => {
     expect(screen.getByTestId("toolbar-callout")).toBeTruthy();
     Keyboard.keyPress(KEYS.C);
     expect(h.state.activeTool.type).toBe("callout");
     mouse.downAt(100, 100);
     mouse.moveTo(260, 180);
     mouse.up();
-    expect(h.elements).toHaveLength(1);
+    Keyboard.exitTextEditor(await getTextEditor());
+    expect(getNonDeletedElements(h.elements)).toHaveLength(1);
     expect(h.elements[0].type).toBe("callout");
     const restored = restoreElements(
-      JSON.parse(JSON.stringify(h.elements)),
+      JSON.parse(JSON.stringify(getNonDeletedElements(h.elements))),
       null,
     );
     expect(restored).toHaveLength(1);
@@ -67,6 +68,37 @@ describe("restored callout tool", () => {
       tailTip: expect.any(Object),
       tailAttachment: expect.any(Number),
     });
+  });
+
+  it.each([false, true])(
+    "focuses text immediately after drawing a callout (tool locked: %s)",
+    async (locked) => {
+      Keyboard.keyPress(KEYS.C);
+      API.setAppState({ activeTool: { ...h.state.activeTool, locked } });
+      mouse.downAt(100, 100);
+      mouse.moveTo(260, 180);
+      mouse.up();
+      const editor = await getTextEditor();
+      expect(document.activeElement).toBe(editor);
+      updateTextEditor(editor, "Type immediately");
+      Keyboard.exitTextEditor(editor);
+      expect(h.state.activeTool.type).toBe(locked ? "callout" : "selection");
+      expect(h.state.activeTool.locked).toBe(locked);
+      expect(
+        h.elements.find((element) => element.type === "text"),
+      ).toMatchObject({
+        originalText: "Type immediately",
+        containerId: h.elements[0].id,
+      });
+    },
+  );
+
+  it("focuses text after click-to-place creation", async () => {
+    Keyboard.keyPress(KEYS.C);
+    mouse.downAt(100, 100);
+    mouse.up();
+    expect(document.activeElement).toBe(await getTextEditor());
+    expect(h.state.editingTextElement?.containerId).toBe(h.elements[0].id);
   });
 
   it("starts each new callout in box-only mode", () => {
@@ -115,6 +147,7 @@ describe("restored callout tool", () => {
       API.setSelectedElements([callout]);
       const before = getCalloutTailTipGlobalCoords(callout);
       UI.resize(callout, handle, [35, 25]);
+      expect(h.state.editingTextElement).toBeNull();
       const after = getCalloutTailTipGlobalCoords(
         h.elements[0] as typeof callout,
       );
@@ -162,6 +195,7 @@ describe("restored callout tool", () => {
       h.elements[0] as typeof callout,
     );
     expect(h.elements[0].x).toBe(340);
+    expect(h.state.editingTextElement).toBeNull();
     expect(after[0]).toBeCloseTo(before[0], 8);
     expect(after[1]).toBeCloseTo(before[1], 8);
   });
@@ -738,11 +772,12 @@ describe("restored callout tool", () => {
     }
   });
 
-  it("replays stored tip geometry regardless of the current selection mode", () => {
+  it("replays stored tip geometry regardless of the current selection mode", async () => {
     Keyboard.keyPress(KEYS.C);
     mouse.downAt(300, 300);
     mouse.moveTo(460, 380);
     mouse.up();
+    Keyboard.exitTextEditor(await getTextEditor());
     const callout = h.elements[0] as ReturnType<typeof newCalloutElement>;
     const before = {
       x: callout.x,

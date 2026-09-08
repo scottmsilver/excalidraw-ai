@@ -12829,6 +12829,17 @@ class App extends React.Component<AppProps, AppState> {
         return;
       }
 
+      const finishCreation = () => {
+        this.cursor.refreshHover();
+        if (activeTool.type === "callout" && isCalloutElement(newElement)) {
+          this.startTextEditing({
+            sceneX: newElement.x + newElement.width / 2,
+            sceneY: newElement.y + newElement.height / 2,
+            container: newElement,
+          });
+        }
+      };
+
       if (
         !this.isToolLocked() &&
         activeTool.type !== "freedraw" &&
@@ -12850,7 +12861,7 @@ class App extends React.Component<AppProps, AppState> {
           // reset once the tool revert has settled
           () => {
             this.cursor.reset();
-            this.cursor.refreshHover();
+            finishCreation();
           },
         );
       } else {
@@ -12859,7 +12870,7 @@ class App extends React.Component<AppProps, AppState> {
             newElement: null,
             suggestedBinding: null,
           },
-          () => this.cursor.refreshHover(),
+          finishCreation,
         );
       }
     });
