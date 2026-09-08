@@ -12,6 +12,30 @@ import { act, fireEvent, render, screen, unmountComponent } from "./test-utils";
 
 const { h } = window;
 describe("shared Auto contrast controls", () => {
+  it("shows only the master switch until Advanced is opened", () => {
+    const element = API.createElement({ type: "rectangle" });
+    API.setElements([element]);
+    API.setSelectedElements([element]);
+    expect(screen.getByLabelText("Auto contrast")).toBeVisible();
+    expect(screen.getByLabelText("Auto foreground")).not.toBeVisible();
+    expect(screen.getByLabelText("Auto background")).not.toBeVisible();
+    expect(screen.getByLabelText("Fill opacity")).not.toBeVisible();
+    fireEvent.click(screen.getByText("Advanced", { exact: true }));
+    expect(screen.getByLabelText("Auto foreground")).toBeVisible();
+    fireEvent.click(screen.getByLabelText("Auto contrast"));
+    expect(screen.getByLabelText("Auto foreground")).toBeChecked();
+    expect(screen.getByLabelText("Auto background")).toBeChecked();
+    fireEvent.click(screen.getByLabelText("Auto foreground"));
+    fireEvent.click(screen.getByLabelText("Auto contrast"));
+    expect(screen.getByLabelText("Auto foreground")).toBeChecked();
+    fireEvent.click(screen.getByLabelText("Auto contrast"));
+    expect(screen.getByLabelText("Auto foreground")).not.toBeChecked();
+    expect(screen.getByLabelText("Auto background")).not.toBeChecked();
+    const next = API.createElement({ type: "ellipse" });
+    API.setElements([next]);
+    API.setSelectedElements([next]);
+    expect(screen.getByLabelText("Auto foreground")).not.toBeVisible();
+  });
   it("creates an Auto shape's label with the owner's opacity rather than a stale tool opacity", async () => {
     const rectangle = API.createElement({
       type: "rectangle",

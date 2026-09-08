@@ -1,6 +1,6 @@
 # Shared Auto contrast
 
-User-approved design: one **Auto contrast** switch per supported shape, with independent foreground, background and fill-opacity overrides. On for new callouts; opt-in for text, rectangles, ellipses, diamonds, arrows and lines. Unsupported elements (including images) are unchanged. Only applicable controls are shown. Multi-selection applies changes to supported annotation owners, not independently to their bound labels.
+User-approved design: one **Auto contrast** switch per supported shape. Independent foreground, background and fill-opacity overrides are hidden inside a collapsed **Advanced** disclosure, which resets closed when selection changes. The master enables or disables all applicable fields together; activating a partially automatic master enables all fields. On for new callouts; opt-in for text, rectangles, ellipses, diamonds, arrows and lines. Unsupported elements (including images) are unchanged. Only applicable controls are shown. Multi-selection applies changes to supported annotation owners, not independently to their bound labels.
 
 Switching on enables all applicable fields. A manual color/opacity choice locks only that field. Switching off freezes the current displayed colors/fill opacity; the UI indicates partial Auto when overrides are mixed. Auto continues sampling underlying artwork during gestures. Existing callout settings and old manual drawings retain their behavior. Standalone text and strokes may receive an opposite-color halo when mixed artwork prevents a single color from being readable.
 

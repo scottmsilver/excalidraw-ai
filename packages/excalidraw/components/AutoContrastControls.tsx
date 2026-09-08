@@ -117,7 +117,7 @@ export const AutoContrastControls = ({
         <input
           type="checkbox"
           aria-label="Auto contrast"
-          checked={any}
+          checked={all}
           ref={(input) => {
             if (input) {
               input.indeterminate = any && !all;
@@ -136,54 +136,64 @@ export const AutoContrastControls = ({
         />
         Auto contrast
       </label>
-      {any && !all && <small>Some settings are manual</small>}
-      {fieldControl("foreground", "Foreground")}
-      {!!fillOwners.length && (
-        <>
-          {fieldControl("background", "Background", fillOwners)}
-          {fieldControl("opacity", "Background opacity", fillOwners)}
-          <label>
-            Fill opacity
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={opacity}
-              aria-label={
-                owners.length === 1 && owners[0].type === "callout"
-                  ? "Callout background opacity"
-                  : "Fill opacity"
-              }
-              onChange={(event) =>
-                update(
-                  (element) => ({
-                    ...(getAutoContrastModes(element)
-                      ? setAutoContrastFields(element, { opacity: false })
-                      : {}),
-                    ...autoContrastChanges(element, {
-                      fillOpacity: Number(event.target.value),
+      <details
+        key={owners
+          .map((element) => element.id)
+          .sort()
+          .join(",")}
+      >
+        <summary>Advanced</summary>
+        {any && !all && <small>Some settings are manual</small>}
+        {fieldControl("foreground", "Foreground")}
+        {!!fillOwners.length && (
+          <>
+            {fieldControl("background", "Background", fillOwners)}
+            {fieldControl("opacity", "Background opacity", fillOwners)}
+            <label>
+              Fill opacity
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={opacity}
+                aria-label={
+                  owners.length === 1 && owners[0].type === "callout"
+                    ? "Callout background opacity"
+                    : "Fill opacity"
+                }
+                onChange={(event) =>
+                  update(
+                    (element) => ({
+                      ...(getAutoContrastModes(element)
+                        ? setAutoContrastFields(element, { opacity: false })
+                        : {}),
+                      ...autoContrastChanges(element, {
+                        fillOpacity: Number(event.target.value),
+                      }),
                     }),
-                  }),
-                  fillOwners,
-                )
-              }
-            />
-            <output>
-              {mixedOpacity ? "Mixed" : `${Math.round(opacity)}%`}
-            </output>
-          </label>
-        </>
-      )}
-      {owners.some((element) => getAutoContrastResolved(element)?.fallback) && (
-        <p role="status">Artwork unavailable; using a contrast fallback.</p>
-      )}
-      {owners.some(
-        (element) => getAutoContrastResolved(element)?.lowContrast,
-      ) && (
-        <p role="status">
-          Low contrast: a single color may not be readable everywhere.
-        </p>
-      )}
+                    fillOwners,
+                  )
+                }
+              />
+              <output>
+                {mixedOpacity ? "Mixed" : `${Math.round(opacity)}%`}
+              </output>
+            </label>
+          </>
+        )}
+        {owners.some(
+          (element) => getAutoContrastResolved(element)?.fallback,
+        ) && (
+          <p role="status">Artwork unavailable; using a contrast fallback.</p>
+        )}
+        {owners.some(
+          (element) => getAutoContrastResolved(element)?.lowContrast,
+        ) && (
+          <p role="status">
+            Low contrast: a single color may not be readable everywhere.
+          </p>
+        )}
+      </details>
     </fieldset>
   );
 };
