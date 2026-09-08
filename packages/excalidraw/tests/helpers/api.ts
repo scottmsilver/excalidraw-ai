@@ -22,6 +22,7 @@ import {
   newLinearElement,
   newMagicFrameElement,
   newTextElement,
+  newCalloutElement,
 } from "@excalidraw/element";
 
 import { isUsingAdaptiveRadius, getSelectedElements } from "@excalidraw/element";
@@ -378,6 +379,9 @@ export class API {
         break;
       case "magicframe":
         element = newMagicFrameElement({ ...base, width, height });
+        break;
+      case "callout":
+        element = newCalloutElement({ ...base, width, height, type });
         break;
       default:
         assertNever(

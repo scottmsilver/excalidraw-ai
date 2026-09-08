@@ -60,11 +60,13 @@ import { headingForPointIsHorizontal } from "./heading";
 import { canChangeRoundness } from "./comparisons";
 import {
   elementCenterPoint,
-  getArrowheadPoints,
+  getArrowheadPoints as getLinearArrowheadPoints,
   getDiamondPoints,
   getElementAbsoluteCoords,
 } from "./bounds";
 import { shouldTestInside } from "./collision";
+
+import { getCalloutTailPoints, getCalloutTailArrowheadPoints } from "./callout";
 
 import type {
   ExcalidrawElement,
@@ -229,7 +231,8 @@ export const generateRoughOptions = (
     case "iframe":
     case "embeddable":
     case "diamond":
-    case "ellipse": {
+    case "ellipse":
+    case "callout": {
       options.fillStyle = element.fillStyle;
       options.fill = isTransparent(element.backgroundColor)
         ? undefined
@@ -376,6 +379,7 @@ const getArrowheadShapes = (
   options: Options,
   canvasBackgroundColor: string,
   isDarkMode: boolean,
+  getArrowheadPoints: typeof getLinearArrowheadPoints = getLinearArrowheadPoints,
 ) => {
   if (arrowhead === null) {
     return [];
@@ -988,6 +992,71 @@ const _generateElementShape = (
       // `element.canvas` on rerenders
       return shape;
     }
+    case "callout": {
+      const shapes: ElementShapes[typeof element.type] = [];
+      const options = generateRoughOptions(element, false, isDarkMode);
+
+      // Generate rectangle body (similar to rectangle case)
+      if (element.roundness) {
+        const w = element.width;
+        const h = element.height;
+        const r = getCornerRadius(Math.min(w, h), element);
+        shapes.push(
+          generator.path(
+            `M ${r} 0 L ${w - r} 0 Q ${w} 0, ${w} ${r} L ${w} ${
+              h - r
+            } Q ${w} ${h}, ${w - r} ${h} L ${r} ${h} Q 0 ${h}, 0 ${
+              h - r
+            } L 0 ${r} Q 0 0, ${r} 0`,
+            generateRoughOptions(element, true, isDarkMode),
+          ),
+        );
+      } else {
+        shapes.push(
+          generator.rectangle(0, 0, element.width, element.height, options),
+        );
+      }
+
+      // Generate tail as bezier curve
+      const { attachPoint, controlPoint, tipPoint } =
+        getCalloutTailPoints(element);
+      const tailPath = `M ${attachPoint[0]} ${attachPoint[1]} Q ${controlPoint[0]} ${controlPoint[1]} ${tipPoint[0]} ${tipPoint[1]}`;
+
+      shapes.push(
+        generator.path(tailPath, {
+          ...options,
+          fill: undefined, // Tail is stroke-only
+        }),
+      );
+
+      // Reuse the upstream arrowhead renderer, with the exact tail tangent.
+      if (element.tailArrowhead) {
+        const tailElement: ExcalidrawLinearElement = {
+          ...element,
+          type: "arrow",
+          points: [controlPoint, tipPoint],
+          startBinding: null,
+          endBinding: null,
+          startArrowhead: null,
+          endArrowhead: element.tailArrowhead,
+        };
+        shapes.push(
+          ...getArrowheadShapes(
+            tailElement,
+            [],
+            "end",
+            element.tailArrowhead,
+            generator,
+            options,
+            canvasBackgroundColor,
+            isDarkMode,
+            (_element, _shape, _position, arrowhead, offset) =>
+              getCalloutTailArrowheadPoints(element, arrowhead, offset),
+          ),
+        );
+      }
+      return shapes;
+    }
     default: {
       assertNever(
         element,
@@ -1081,6 +1150,7 @@ export const getElementShape = <Point extends GlobalPoint | LocalPoint>(
     case "iframe":
     case "text":
     case "selection":
+    case "callout":
       return getPolygonShape(element);
     case "arrow":
     case "line": {

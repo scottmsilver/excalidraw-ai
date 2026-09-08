@@ -279,6 +279,37 @@ const renderElementToSvg = (
       addToRoot(embeddableNode, element);
       break;
     }
+    case "callout": {
+      const group = svgRoot.ownerDocument.createElementNS(SVG_NS, "g");
+      group.setAttribute("stroke-linecap", "round");
+      group.setAttribute(
+        "transform",
+        `translate(${offsetX || 0} ${
+          offsetY || 0
+        }) rotate(${degree} ${cx} ${cy})`,
+      );
+      if (opacity !== 1) {
+        group.setAttribute("stroke-opacity", `${opacity}`);
+        group.setAttribute("fill-opacity", `${opacity}`);
+      }
+      for (const shape of ShapeCache.generateElementShape(
+        element,
+        renderConfig,
+      )) {
+        group.appendChild(
+          roughSVGDrawWithPrecision(rsvg, shape, MAX_DECIMALS_FOR_SVG_EXPORT),
+        );
+      }
+      const clipped = maybeWrapNodesInFrameClipPath(
+        element,
+        root,
+        [group],
+        renderConfig.frameRendering,
+        elementsMap,
+      );
+      addToRoot(clipped || group, element);
+      break;
+    }
     case "line":
     case "arrow": {
       const boundText = getBoundTextElement(element, elementsMap);

@@ -25,6 +25,7 @@ import {
 import {
   TextIcon,
   ImageIcon,
+  CalloutIcon,
   DotsIcon,
   frameToolIcon,
   EmbedIcon,
@@ -114,6 +115,7 @@ export const MobileToolbar = ({ app, setAppState }: MobileToolbarProps) => {
   const extraTools: readonly typeof activeTool.type[] = (
     [
       "text",
+      "callout",
       "frame",
       "embeddable",
       "laser",
@@ -135,6 +137,8 @@ export const MobileToolbar = ({ app, setAppState }: MobileToolbarProps) => {
       ? TextIcon
       : activeTool.type === "image"
       ? ImageIcon
+      : activeTool.type === "callout"
+      ? CalloutIcon
       : activeTool.type === "frame"
       ? frameToolIcon
       : activeTool.type === "embeddable"
@@ -290,6 +294,15 @@ export const MobileToolbar = ({ app, setAppState }: MobileToolbarProps) => {
               {t("toolBar.frame")}
             </DropdownMenu.Item>
           )}
+          <DropdownMenu.Item
+            onSelect={() => app.setActiveTool({ type: "callout" })}
+            icon={CalloutIcon}
+            data-testid="toolbar-callout"
+            selected={activeTool.type === "callout"}
+            disabled={isToolButtonDisabled(app, "callout")}
+          >
+            {t("toolBar.callout")}
+          </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={() => app.setActiveTool({ type: "embeddable" })}
             icon={EmbedIcon}

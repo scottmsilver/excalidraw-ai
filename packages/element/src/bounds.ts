@@ -40,7 +40,10 @@ import {
   isLineElement,
   isTextElement,
   isExcalidrawElement,
+  isCalloutElement,
 } from "./typeChecks";
+
+import { getCalloutTailBounds } from "./callout";
 import { getElementShape } from "./shape";
 import {
   deconstructDiamondElement,
@@ -207,6 +210,62 @@ export class ElementBounds {
       const ww = Math.hypot(w * cos, h * sin);
       const hh = Math.hypot(h * cos, w * sin);
       bounds = [cx - ww, cy - hh, cx + ww, cy + hh];
+    } else if (isCalloutElement(element)) {
+      // Include the curve's control hull and arrowhead, not just its tip.
+      const [tailMinX, tailMinY, tailMaxX, tailMaxY] =
+        getCalloutTailBounds(element);
+
+      // Get rotated corners of the rectangle body
+      const [x11, y11] = pointRotateRads(
+        pointFrom(x1, y1),
+        pointFrom(cx, cy),
+        element.angle,
+      );
+      const [x12, y12] = pointRotateRads(
+        pointFrom(x1, y2),
+        pointFrom(cx, cy),
+        element.angle,
+      );
+      const [x22, y22] = pointRotateRads(
+        pointFrom(x2, y2),
+        pointFrom(cx, cy),
+        element.angle,
+      );
+      const [x21, y21] = pointRotateRads(
+        pointFrom(x2, y1),
+        pointFrom(cx, cy),
+        element.angle,
+      );
+
+      const tailCorners = [
+        [tailMinX, tailMinY],
+        [tailMinX, tailMaxY],
+        [tailMaxX, tailMinY],
+        [tailMaxX, tailMaxY],
+      ].map(([x, y]) =>
+        pointRotateRads(
+          pointFrom(element.x + x, element.y + y),
+          pointFrom(cx, cy),
+          element.angle,
+        ),
+      );
+      const minX = Math.min(x11, x12, x22, x21, ...tailCorners.map(([x]) => x));
+      const minY = Math.min(
+        y11,
+        y12,
+        y22,
+        y21,
+        ...tailCorners.map(([, y]) => y),
+      );
+      const maxX = Math.max(x11, x12, x22, x21, ...tailCorners.map(([x]) => x));
+      const maxY = Math.max(
+        y11,
+        y12,
+        y22,
+        y21,
+        ...tailCorners.map(([, y]) => y),
+      );
+      bounds = [minX, minY, maxX, maxY];
     } else {
       const [x11, y11] = pointRotateRads(
         pointFrom(x1, y1),
@@ -276,6 +335,8 @@ export const getElementAbsoluteCoords = (
       ];
     }
   }
+  // Note: Callout bounds intentionally exclude tail tip so selection/resize
+  // handles stay on the rectangle body. Canvas sizing handles tail separately.
   return [
     element.x,
     element.y,

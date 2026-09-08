@@ -29,6 +29,7 @@ import type {
   ExcalidrawLineElement,
   ExcalidrawFlowchartNodeElement,
   ExcalidrawLinearElementSubType,
+  ExcalidrawCalloutElement,
 } from "./types";
 
 export const isInitializedImageElement = <T extends ExcalidrawElement>(
@@ -120,6 +121,12 @@ export const isArrowElement = <T extends ExcalidrawElement>(
   return element != null && element.type === "arrow";
 };
 
+export const isCalloutElement = (
+  element?: ExcalidrawElement | null,
+): element is ExcalidrawCalloutElement => {
+  return element != null && element.type === "callout";
+};
+
 export const isElbowArrow = <T extends ExcalidrawElement>(
   element?: T,
 ): element is T & ExcalidrawElbowArrowElement => {
@@ -189,6 +196,7 @@ export const isBindableElement = <T extends ExcalidrawElement>(
       element.type === "embeddable" ||
       element.type === "frame" ||
       element.type === "magicframe" ||
+      element.type === "callout" ||
       (element.type === "text" && !element.containerId))
   );
 };
@@ -237,6 +245,7 @@ export const isTextBindableContainer = <T extends ExcalidrawElement>(
     (element.type === "rectangle" ||
       element.type === "diamond" ||
       element.type === "ellipse" ||
+      element.type === "callout" ||
       isArrowElement(element))
   );
 };
@@ -261,7 +270,8 @@ export const isExcalidrawElement = (
     case "frame":
     case "magicframe":
     case "image":
-    case "selection": {
+    case "selection":
+    case "callout": {
       return true;
     }
     default: {
@@ -310,7 +320,8 @@ export const isUsingAdaptiveRadius = (type: string) =>
   type === "rectangle" ||
   type === "embeddable" ||
   type === "iframe" ||
-  type === "image";
+  type === "image" ||
+  type === "callout";
 
 export const isUsingProportionalRadius = (type: string) =>
   type === "line" || type === "arrow" || type === "diamond";

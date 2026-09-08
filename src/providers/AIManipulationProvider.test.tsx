@@ -57,7 +57,8 @@ describe("AI manipulation provider integration", () => {
     expect(result.current.isReviewing).toBe(false);
     expect(result.current.iterationImages).toEqual([]);
     expect(result.current.referencePointCount).toBe(2);
-    expect(result.current.elementsSnapshot).toBe(snapshot);
+    expect(result.current.elementsSnapshot).toEqual(snapshot);
+    expect(result.current.elementsSnapshot).not.toBe(snapshot);
   });
 
   it.each(["acceptResult", "rejectResult"] as const)(

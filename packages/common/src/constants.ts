@@ -246,6 +246,15 @@ export const IMAGE_MIME_TYPES = {
   jfif: "image/jfif",
 } as const;
 
+// HEIC/HEIF image types - require conversion to JPEG
+export const HEIC_MIME_TYPES = {
+  heic: "image/heic",
+  heif: "image/heif",
+} as const;
+
+// PDF type - requires page selection and conversion to PNG
+export const PDF_MIME_TYPE = "application/pdf" as const;
+
 export const STRING_MIME_TYPES = {
   text: "text/plain",
   html: "text/html",
@@ -268,6 +277,9 @@ export const MIME_TYPES = {
   binary: "application/octet-stream",
   // image
   ...IMAGE_MIME_TYPES,
+  // convertible formats (HEIC, PDF)
+  ...HEIC_MIME_TYPES,
+  pdf: PDF_MIME_TYPE,
 } as const;
 
 export const ALLOWED_PASTE_MIME_TYPES = [
@@ -488,6 +500,7 @@ export const TOOL_TYPE = {
   rectangle: "rectangle",
   diamond: "diamond",
   ellipse: "ellipse",
+  callout: "callout",
   arrow: "arrow",
   line: "line",
   freedraw: "freedraw",

@@ -169,6 +169,7 @@ export type ElementShapes = {
   freedraw: (Drawable | SVGPathString)[];
   arrow: Drawable[];
   line: Drawable[];
+  callout: Drawable[];
   text: null;
   image: null;
   frame: null;

@@ -37,6 +37,7 @@ exports[`exportToSvg > with default arguments 1`] = `
   "currentItemStrokeStyle": "solid",
   "currentItemStrokeVariability": "constant",
   "currentItemStrokeWidthKey": "medium",
+  "currentItemTailArrowhead": "arrow",
   "currentItemTextAlign": "left",
   "cursorButton": "up",
   "defaultSidebarDockedPreference": false,

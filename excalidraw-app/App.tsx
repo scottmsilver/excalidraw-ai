@@ -110,6 +110,7 @@ import { ManipulationDialog } from "../src/components/ManipulationDialog";
 import { extractShapesFromElements } from "../src/utils/shapeExtractor";
 
 import { ThinkingOverlay } from "./components/ThinkingOverlay";
+import { CaptureToolbarContent, MaskedImageSelectionOverlay } from "./capture";
 
 import CustomStats from "./CustomStats";
 import {
@@ -469,19 +470,140 @@ const AIManipulationUI: React.FC<{
     acceptResult,
     rejectResult,
     elementsSnapshot,
-    setElementsSnapshot,
+    pushAIUndoEntry,
+    clearAIUndoStack,
+    aiUndo,
+    aiRedo,
+    canAIUndo,
+    canAIRedo,
   } = useAIManipulation();
 
-  // Capture snapshot when entering AI mode - stores elements before annotations are added
-  // This allows us to restore the scene on reject, or calculate proper bounds on accept
+  // Clear AI undo stack when exiting AI mode
+  // Note: Snapshot and initialization are done in handleToggle (AIToolbarButton) BEFORE locking
   React.useEffect(() => {
-    if (isAIModeActive && excalidrawAPI) {
-      // Store current elements (before any AI annotations are drawn)
-      const currentElements = excalidrawAPI.getSceneElements();
-      const nonDeletedElements = currentElements.filter((el) => !el.isDeleted);
-      setElementsSnapshot(nonDeletedElements);
+    if (!isAIModeActive) {
+      clearAIUndoStack();
     }
-  }, [isAIModeActive, excalidrawAPI, setElementsSnapshot]);
+  }, [isAIModeActive, clearAIUndoStack]);
+
+  // Track element changes during AI mode for undo/redo
+  // Use a ref to avoid re-subscribing on every pushAIUndoEntry change
+  const pushAIUndoEntryRef = React.useRef(pushAIUndoEntry);
+  pushAIUndoEntryRef.current = pushAIUndoEntry;
+
+  React.useEffect(() => {
+    if (!isAIModeActive || !excalidrawAPI) {
+      return;
+    }
+
+    // Subscribe to changes
+    const unsubscribe = excalidrawAPI.onChange((elements) => {
+      // Filter non-deleted elements and push to undo stack
+      const nonDeletedElements = elements.filter((el) => !el.isDeleted);
+      pushAIUndoEntryRef.current(nonDeletedElements);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [isAIModeActive, excalidrawAPI]);
+
+  // Keyboard shortcuts for AI mode undo/redo
+  // Intercepts Ctrl+Z and Ctrl+Shift+Z/Ctrl+Y when AI mode is active
+  React.useEffect(() => {
+    if (!isAIModeActive || !excalidrawAPI) {
+      return;
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+      const isZ = e.key === "z" || e.key === "Z";
+      const isY = e.key === "y" || e.key === "Y";
+
+      // Ctrl+Shift+Z or Ctrl+Y = Redo
+      if (isCtrlOrCmd && ((isZ && e.shiftKey) || isY)) {
+        e.preventDefault();
+        e.stopPropagation();
+        const elementsToRestore = aiRedo();
+        if (elementsToRestore && excalidrawAPI) {
+          excalidrawAPI.updateScene({
+            elements: elementsToRestore as any,
+            captureUpdate: CaptureUpdateAction.NEVER,
+          });
+        }
+        return;
+      }
+
+      // Ctrl+Z = Undo
+      if (isCtrlOrCmd && isZ && !e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        const elementsToRestore = aiUndo();
+        if (elementsToRestore && excalidrawAPI) {
+          excalidrawAPI.updateScene({
+            elements: elementsToRestore as any,
+            captureUpdate: CaptureUpdateAction.NEVER,
+          });
+        }
+      }
+    };
+
+    // Use capture phase to intercept before excalidraw handles it
+    document.addEventListener("keydown", handleKeyDown, { capture: true });
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown, { capture: true });
+    };
+  }, [isAIModeActive, excalidrawAPI, aiUndo, aiRedo]);
+
+  // AI undo/redo handlers for button clicks
+  const handleAIUndo = useCallback(() => {
+    const elementsToRestore = aiUndo();
+    if (elementsToRestore && excalidrawAPI) {
+      excalidrawAPI.updateScene({
+        elements: elementsToRestore as ExcalidrawElement[],
+        captureUpdate: CaptureUpdateAction.NEVER,
+      });
+    }
+  }, [aiUndo, excalidrawAPI]);
+
+  const handleAIRedo = useCallback(() => {
+    const elementsToRestore = aiRedo();
+    if (elementsToRestore && excalidrawAPI) {
+      excalidrawAPI.updateScene({
+        elements: elementsToRestore as ExcalidrawElement[],
+        captureUpdate: CaptureUpdateAction.NEVER,
+      });
+    }
+  }, [aiRedo, excalidrawAPI]);
+
+  // Sync AI undo state to excalidraw's history UI
+  // This makes the native undo/redo buttons reflect AI mode state and behavior
+  React.useEffect(() => {
+    if (!excalidrawAPI) {
+      return;
+    }
+
+    if (isAIModeActive) {
+      // Override history button states and behavior with AI undo stack
+      excalidrawAPI.history.overrideState(
+        !canAIUndo,
+        !canAIRedo,
+        handleAIUndo,
+        handleAIRedo,
+      );
+    } else {
+      // Clear overrides when exiting AI mode
+      excalidrawAPI.history.clearOverride();
+    }
+  }, [
+    isAIModeActive,
+    excalidrawAPI,
+    canAIUndo,
+    canAIRedo,
+    handleAIUndo,
+    handleAIRedo,
+  ]);
 
   // Get app state for overlay positioning
   const appState = useExcalidrawStateValue(["zoom", "scrollX", "scrollY"]);
@@ -558,6 +680,9 @@ const AIManipulationUI: React.FC<{
       }
 
       try {
+        // Resume history recording so the final change is recorded
+        excalidrawAPI.history.resume();
+
         // Ensure imageData is a data URL
         const dataURL = (
           imageData.startsWith("data:")
@@ -578,33 +703,34 @@ const AIManipulationUI: React.FC<{
           },
         ]);
 
-        // Use SNAPSHOT elements for bounds calculation (not current elements which include annotations)
-        // This ensures the AI result is positioned correctly based on the original content
+        // Get snapshot elements for filtering annotations
         const snapshotElements =
           elementsSnapshot as readonly ExcalidrawElement[];
 
-        let minX = Infinity;
-        let minY = Infinity;
-        let maxX = -Infinity;
-        let maxY = -Infinity;
+        // Use exportBounds for positioning - this matches exactly where the preview was shown
+        // exportBounds is computed at execute time from the actual exported image
+        let minX: number;
+        let minY: number;
+        let width: number;
+        let height: number;
 
-        for (const el of snapshotElements) {
-          minX = Math.min(minX, el.x);
-          minY = Math.min(minY, el.y);
-          maxX = Math.max(maxX, el.x + (el.width || 0));
-          maxY = Math.max(maxY, el.y + (el.height || 0));
+        if (
+          exportBounds &&
+          exportBounds.imageWidth &&
+          exportBounds.imageHeight
+        ) {
+          // Use the same bounds that were used for the export/preview
+          minX = exportBounds.minX - exportBounds.exportPadding;
+          minY = exportBounds.minY - exportBounds.exportPadding;
+          width = exportBounds.imageWidth;
+          height = exportBounds.imageHeight;
+        } else {
+          // Fallback to default position (shouldn't happen in normal flow)
+          minX = 0;
+          minY = 0;
+          width = 400;
+          height = 300;
         }
-
-        // Add padding matching exportToBlob default (10px)
-        const EXPORT_PADDING = 10;
-        minX -= EXPORT_PADDING;
-        minY -= EXPORT_PADDING;
-        maxX += EXPORT_PADDING;
-        maxY += EXPORT_PADDING;
-
-        // Calculate dimensions
-        const width = maxX - minX;
-        const height = maxY - minY;
 
         // Create image element at the same position/size as the export
         const imageElement = newImageElement({
@@ -617,27 +743,36 @@ const AIManipulationUI: React.FC<{
           status: "saved",
         });
 
-        // Clear scene and add only the AI result image
-        // This removes the original elements AND any annotations drawn during AI mode
-        const newElements = [imageElement];
-
-        // Fix fractional indices (excalidraw requires proper ordering indices)
-        const syncedElements = syncInvalidIndices(newElements);
-
+        // Restore the original scene, including original locked states, and
+        // add the accepted image as a single undoable update.
+        const finalElements = syncInvalidIndices([
+          ...snapshotElements,
+          imageElement,
+        ]);
         excalidrawAPI.updateScene({
-          elements: syncedElements,
+          elements: finalElements,
+          captureUpdate: CaptureUpdateAction.IMMEDIATELY,
         });
+
+        clearReferencePoints();
+        exitAIMode();
+
+        // Small delay before closing overlay to let the image render
+        // This prevents a flash while the canvas image loads
+        setTimeout(() => {
+          closeDialog();
+        }, 150);
       } catch (error) {
         console.error("Failed to add AI result to canvas:", error);
+        clearReferencePoints();
+        exitAIMode();
+        closeDialog();
       }
-
-      clearReferencePoints();
-      exitAIMode();
-      closeDialog();
     },
     [
       excalidrawAPI,
       elementsSnapshot,
+      exportBounds,
       clearReferencePoints,
       exitAIMode,
       closeDialog,
@@ -656,14 +791,18 @@ const AIManipulationUI: React.FC<{
     [iterationImages, handleResult, acceptResult],
   );
 
-  // Handle reject - restore snapshot (removes annotations) and cleanup
+  // Handle reject - remove annotations and cleanup
   const handleReject = React.useCallback(() => {
-    // Restore the scene to the snapshot (removes any annotations drawn during AI mode)
+    // Resume history recording
+    excalidrawAPI?.history.resume();
+
+    // Get original element IDs from snapshot
     const snapshotElements = elementsSnapshot as readonly ExcalidrawElement[];
-    if (excalidrawAPI && snapshotElements.length > 0) {
+    if (excalidrawAPI) {
       const syncedElements = syncInvalidIndices([...snapshotElements]);
       excalidrawAPI.updateScene({
         elements: syncedElements,
+        captureUpdate: CaptureUpdateAction.NEVER,
       });
     }
     rejectResult();
@@ -849,10 +988,29 @@ const AIManipulationUI: React.FC<{
 };
 
 /**
- * AI Edit button for the toolbar.
- * Shows in top nav next to lock button.
- * When active, shows a popover with Execute button.
+ * Get non-deleted elements from the scene for snapshotting.
  */
+const getSnapshotElements = (excalidrawAPI: ExcalidrawImperativeAPI) => {
+  const currentElements = excalidrawAPI.getSceneElements();
+  return currentElements.filter((el) => !el.isDeleted);
+};
+
+/**
+ * Lock all elements in the scene so they can't be modified.
+ * Used when entering AI mode to prevent changes to original content.
+ */
+const lockAllElements = (excalidrawAPI: ExcalidrawImperativeAPI) => {
+  const currentElements = excalidrawAPI.getSceneElements();
+  const lockedElements = currentElements.map((el) =>
+    newElementWith(el, { locked: true }),
+  );
+  const syncedElements = syncInvalidIndices(lockedElements);
+  excalidrawAPI.updateScene({
+    elements: syncedElements,
+    captureUpdate: CaptureUpdateAction.NEVER,
+  });
+};
+
 const AIToolbarButton: React.FC<{
   excalidrawAPI: ExcalidrawImperativeAPI | null;
 }> = ({ excalidrawAPI }) => {
@@ -868,6 +1026,8 @@ const AIToolbarButton: React.FC<{
     setAnnotatedCanvasImage,
     setExportBounds,
     elementsSnapshot,
+    setElementsSnapshot,
+    initializeAIUndoState,
   } = useAIManipulation();
 
   // Sync export bounds to coordinate highlight context for AI log coordinate display
@@ -980,12 +1140,46 @@ const AIToolbarButton: React.FC<{
   // Toggle AI mode
   const handleToggle = useCallback(() => {
     if (isAIModeActive) {
+      // Exiting AI mode via toggle (not accept/reject)
+      // Resume history recording
+      excalidrawAPI?.history.resume();
+
+      const snapshotElements = elementsSnapshot as readonly ExcalidrawElement[];
+      if (excalidrawAPI) {
+        const syncedElements = syncInvalidIndices([...snapshotElements]);
+        excalidrawAPI.updateScene({
+          elements: syncedElements,
+          captureUpdate: CaptureUpdateAction.NEVER,
+        });
+      }
+
       clearReferencePoints();
       exitAIMode();
     } else {
+      // Entering AI mode - pause history recording
+      // All changes during AI mode go to an isolated context
+      excalidrawAPI?.history.pause();
+
+      // Take snapshot BEFORE locking so we preserve original unlocked state
+      if (excalidrawAPI) {
+        const snapshotElements = getSnapshotElements(excalidrawAPI);
+        setElementsSnapshot(snapshotElements);
+        initializeAIUndoState(snapshotElements);
+        lockAllElements(excalidrawAPI);
+      }
+
       enterAIMode();
     }
-  }, [isAIModeActive, clearReferencePoints, exitAIMode, enterAIMode]);
+  }, [
+    isAIModeActive,
+    excalidrawAPI,
+    elementsSnapshot,
+    clearReferencePoints,
+    exitAIMode,
+    enterAIMode,
+    setElementsSnapshot,
+    initializeAIUndoState,
+  ]);
 
   // Allow execution when AI mode is active - user can provide context via:
   // - Reference points (Shift+Click markers)
@@ -1025,7 +1219,8 @@ const AIToolbarButton: React.FC<{
             left: "50%",
             transform: "translateX(-50%)",
             marginTop: "8px",
-            backgroundColor: "var(--island-bg-color)",
+            backgroundColor: "rgba(255, 255, 255, 0.85)",
+            backdropFilter: "blur(8px)",
             borderRadius: "8px",
             boxShadow: "0 2px 12px rgba(0, 0, 0, 0.15)",
             padding: "8px",
@@ -1044,52 +1239,83 @@ const AIToolbarButton: React.FC<{
               height: 0,
               borderLeft: "6px solid transparent",
               borderRight: "6px solid transparent",
-              borderBottom: "6px solid var(--island-bg-color)",
+              borderBottom: "6px solid rgba(255, 255, 255, 0.85)",
             }}
           />
-          {/* Execute button */}
-          <button
-            type="button"
-            onClick={handleExecute}
-            disabled={!canExecute || isProcessing}
+          {/* Help hint in handwriting style */}
+          <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "6px 12px",
-              backgroundColor: canExecute
-                ? "var(--color-primary)"
-                : "var(--color-gray-30)",
-              color: canExecute ? "white" : "var(--color-gray-60)",
-              border: "none",
-              borderRadius: "6px",
-              cursor: canExecute ? "pointer" : "not-allowed",
-              fontSize: "13px",
-              fontWeight: 500,
+              padding: "8px 4px",
+              fontFamily: "Virgil, Segoe UI Emoji, sans-serif",
+              fontSize: "12px",
+              color: "var(--color-gray-60)",
+              lineHeight: 1.4,
+              maxWidth: "180px",
+              textAlign: "left",
             }}
           >
-            {isProcessing ? (
-              <>
-                <span
-                  style={{
-                    width: "12px",
-                    height: "12px",
-                    border: "2px solid currentColor",
-                    borderTopColor: "transparent",
-                    borderRadius: "50%",
-                    animation: "spin 1s linear infinite",
-                  }}
-                />
-                Processing...
-              </>
-            ) : (
-              <>
-                {MagicIcon}
-                Execute
-                {referencePoints.length > 0 && ` (${referencePoints.length})`}
-              </>
-            )}
-          </button>
+            <div style={{ marginBottom: "4px" }}>
+              <kbd
+                style={{
+                  fontFamily: "inherit",
+                  backgroundColor: "var(--color-gray-20)",
+                  padding: "1px 4px",
+                  borderRadius: "3px",
+                  fontSize: "11px",
+                }}
+              >
+                Shift
+              </kbd>
+              +Click to place markers
+            </div>
+            <div style={{ marginBottom: "8px" }}>Draw shapes to annotate</div>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={handleExecute}
+                disabled={!canExecute || isProcessing}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  padding: "4px 8px",
+                  backgroundColor: canExecute
+                    ? "var(--color-primary)"
+                    : "var(--color-gray-30)",
+                  color: canExecute ? "white" : "var(--color-gray-60)",
+                  border: "none",
+                  borderRadius: "6px",
+                  fontSize: "11px",
+                  fontFamily: "Assistant, system-ui, sans-serif",
+                  fontWeight: 600,
+                  cursor: canExecute ? "pointer" : "not-allowed",
+                }}
+              >
+                {isProcessing ? (
+                  <>
+                    <span
+                      style={{
+                        width: "10px",
+                        height: "10px",
+                        border: "2px solid currentColor",
+                        borderTopColor: "transparent",
+                        borderRadius: "50%",
+                        animation: "spin 1s linear infinite",
+                      }}
+                    />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    {MagicIcon}
+                    Execute
+                    {referencePoints.length > 0 &&
+                      ` (${referencePoints.length})`}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
           <style>
             {`
               @keyframes spin {
@@ -1211,6 +1437,11 @@ const ExcalidrawWrapper = () => {
         delete window.visualDebug;
       }
       forceRefresh((prev) => !prev);
+
+      // Expose excalidrawAPI for debugging
+      if (excalidrawAPI) {
+        (window as any).excalidrawAPI = excalidrawAPI;
+      }
     }
   }, [excalidrawAPI]);
 
@@ -1811,6 +2042,12 @@ const ExcalidrawWrapper = () => {
 
         {/* AI Edit button injected into toolbar via tunnel */}
         <AIToolbarTunnelContent excalidrawAPI={excalidrawAPI} />
+
+        {/* Capture tool button injected into toolbar via tunnel */}
+        <CaptureToolbarContent excalidrawAPI={excalidrawAPI} />
+
+        {/* Masked image selection overlay - shows dim on negative space for selected lasso/polygon captures */}
+        <MaskedImageSelectionOverlay excalidrawAPI={excalidrawAPI} />
 
         {/* AI Manipulation UI - Reference Points Overlay, Shift+Click Handler & Dialog */}
         <AIManipulationUI excalidrawAPI={excalidrawAPI} />

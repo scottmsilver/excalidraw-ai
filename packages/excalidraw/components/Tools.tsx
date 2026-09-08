@@ -22,6 +22,7 @@ import {
   drawShapeToolIcon,
   TextIcon,
   ImageIcon,
+  CalloutIcon,
   EraserIcon,
   laserPointerToolIcon,
   bucketFillIcon,
@@ -120,6 +121,11 @@ export const TOOLS = defineTools({
   image: {
     icon: ImageIcon,
     numericKey: KEYS["9"],
+  },
+  callout: {
+    icon: CalloutIcon,
+    letterKey: KEYS.C,
+    fillable: true,
   },
   eraser: {
     icon: EraserIcon,
@@ -324,6 +330,7 @@ export const LineToolButton = createToolButton("line");
 export const FreedrawToolButton = createToolButton("freedraw");
 export const TextToolButton = createToolButton("text");
 export const ImageToolButton = createToolButton("image");
+export const CalloutToolButton = createToolButton("callout");
 export const EraserToolButton = createToolButton("eraser");
 export const FrameToolButton = createToolButton("frame");
 

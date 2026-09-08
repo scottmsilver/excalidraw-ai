@@ -12,6 +12,7 @@ import {
   type ShapeMetadata,
   type ShapeType,
 } from "../services/types";
+
 import { canvasToImage, type ExportBounds } from "./coordinateTransforms";
 
 // Excalidraw element types we need to extract
@@ -78,7 +79,7 @@ function transformPoint(point: Point2D, bounds: ExportBounds): Point2D {
  */
 function extractElementMetadata(
   element: SupportedElement,
-  bounds: ExportBounds
+  bounds: ExportBounds,
 ): ShapeMetadata | null {
   if (element.isDeleted) {
     return null;
@@ -140,7 +141,8 @@ function extractElementMetadata(
       const lastPt = rawPoints[rawPoints.length - 1];
       const closureThreshold = 5;
       const distance = Math.sqrt(
-        Math.pow(lastPt[0] - firstPt[0], 2) + Math.pow(lastPt[1] - firstPt[1], 2)
+        Math.pow(lastPt[0] - firstPt[0], 2) +
+          Math.pow(lastPt[1] - firstPt[1], 2),
       );
       if (distance < closureThreshold && rawPoints.length > 2) {
         base.isClosed = true;
@@ -187,7 +189,7 @@ function extractElementMetadata(
  */
 export function extractShapesFromElements(
   elements: readonly unknown[],
-  bounds: ExportBounds
+  bounds: ExportBounds,
 ): ShapeMetadata[] {
   const shapes: ShapeMetadata[] = [];
 
@@ -224,22 +226,32 @@ export function extractShapesFromElements(
  */
 export function calculateExportBounds(
   elements: readonly unknown[],
-  exportPadding: number = 10
+  exportPadding: number = 10,
 ): ExportBounds {
   let minX = Infinity;
   let minY = Infinity;
 
   for (const element of elements) {
     const el = element as BaseElement;
-    if (el.isDeleted) continue;
+    if (el.isDeleted) {
+      continue;
+    }
 
-    if (el.x < minX) minX = el.x;
-    if (el.y < minY) minY = el.y;
+    if (el.x < minX) {
+      minX = el.x;
+    }
+    if (el.y < minY) {
+      minY = el.y;
+    }
   }
 
   // Handle empty elements case
-  if (!isFinite(minX)) minX = 0;
-  if (!isFinite(minY)) minY = 0;
+  if (!isFinite(minX)) {
+    minX = 0;
+  }
+  if (!isFinite(minY)) {
+    minY = 0;
+  }
 
   return {
     minX,

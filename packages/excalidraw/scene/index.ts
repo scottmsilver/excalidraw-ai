@@ -11,6 +11,7 @@ export {
   hasStrokeStyle,
   hasFreedrawMode,
   canHaveArrowheads,
+  canHaveTailArrowhead,
   canChangeRoundness,
 } from "@excalidraw/element";
 export {

@@ -34,6 +34,7 @@ import {
   getToolShortcut,
   HandToolButton,
   ImageToolButton,
+  CalloutToolButton,
   isToolButtonDisabled,
   LassoToolButton,
   LineToolButton,
@@ -219,7 +220,7 @@ export const Toolbar = ({
   heading: React.ReactNode;
 }) => {
   const editorInterface = useEditorInterface();
-  const { AIToolbarTunnel } = useTunnels();
+  const { AIToolbarTunnel, ExtraToolbarTunnel } = useTunnels();
   const isCompactStylesPanel = useStylesPanelMode() === "compact";
 
   const activeTool = appState.activeTool;
@@ -290,6 +291,7 @@ export const Toolbar = ({
         )}
         <TextToolButton {...toolProps} />
         {UIOptions.tools?.image !== false && <ImageToolButton {...toolProps} />}
+        <CalloutToolButton {...toolProps} />
         <EraserToolButton {...toolProps} />
 
         <div
@@ -302,6 +304,7 @@ export const Toolbar = ({
           activeTool={activeTool}
           setAppState={setAppState}
         />
+        <ExtraToolbarTunnel.Out />
       </Stack.Row>
     </Island>
   );

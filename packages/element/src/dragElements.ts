@@ -6,6 +6,8 @@ import {
   DRAGGING_THRESHOLD,
 } from "@excalidraw/common";
 
+import { pointFrom, type LocalPoint } from "@excalidraw/math";
+
 import type {
   AppState,
   NormalizedZoomValue,
@@ -22,6 +24,7 @@ import { getBoundTextElement } from "./textElement";
 import { getMinTextElementWidth } from "./textMeasurements";
 import {
   isArrowElement,
+  isCalloutElement,
   isElbowArrow,
   isFrameLikeElement,
   isImageElement,
@@ -394,6 +397,15 @@ export const dragNewElement = ({
       };
     }
 
+    // For callout elements, update the tail tip position to stay
+    // at a consistent relative position (centered, below the element)
+    let calloutTailUpdate = null;
+    if (isCalloutElement(newElement)) {
+      calloutTailUpdate = {
+        tailTip: pointFrom<LocalPoint>(width / 2, height + 40),
+      };
+    }
+
     scene.mutateElement(
       newElement,
       {
@@ -402,6 +414,7 @@ export const dragNewElement = ({
         width,
         height,
         ...imageInitialDimension,
+        ...calloutTailUpdate,
       },
       { informMutation, isDragging: false },
     );

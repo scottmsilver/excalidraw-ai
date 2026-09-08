@@ -54,6 +54,7 @@ import {
 import {
   isArrowElement,
   isBoundToContainer,
+  isCalloutElement,
   isElbowArrow,
   isLinearElement,
   isLineElement,
@@ -77,6 +78,7 @@ import type {
   Arrowhead,
   ElementsMap,
   ExcalidrawBindableElement,
+  ExcalidrawCalloutElement,
   ExcalidrawElement,
   ExcalidrawFreeDrawElement,
   ExcalidrawLinearElement,
@@ -152,6 +154,7 @@ import { Fonts } from "../fonts";
 import { getLanguage, t } from "../i18n";
 import {
   canHaveArrowheads,
+  canHaveTailArrowhead,
   getSelectedElements,
   getTargetElements,
   isSomeElementSelected,
@@ -1953,6 +1956,60 @@ export const actionChangeArrowhead = register<{
                 hasSelection ? null : appState.currentItemEndArrowhead,
             )}
             onChange={(value) => updateData({ position: "end", type: value })}
+          />
+        </div>
+      </fieldset>
+    );
+  },
+});
+
+export const actionChangeTailArrowhead = register<{
+  type: Arrowhead | null;
+}>({
+  name: "changeTailArrowhead",
+  label: "Change tail arrowhead",
+  trackEvent: false,
+  perform: (elements, appState, value) => {
+    if (!value) {
+      return false;
+    }
+
+    return {
+      elements: changeProperty(elements, appState, (el) => {
+        if (isCalloutElement(el)) {
+          const element: ExcalidrawCalloutElement = newElementWith(el, {
+            tailArrowhead: value.type,
+          });
+          return element;
+        }
+        return el;
+      }),
+      appState: {
+        ...appState,
+        currentItemTailArrowhead: value.type,
+      },
+      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+    };
+  },
+  PanelComponent: ({ elements, appState, updateData, app }) => {
+    return (
+      <fieldset>
+        <legend>{t("labels.arrowheads")}</legend>
+        <div className="iconSelectList buttonList">
+          <IconPicker
+            label="tail_arrowhead"
+            {...getArrowheadOptions(false)}
+            value={getFormValue<Arrowhead | null>(
+              elements,
+              app,
+              (element) =>
+                isCalloutElement(element) && canHaveTailArrowhead(element.type)
+                  ? element.tailArrowhead
+                  : appState.currentItemTailArrowhead ?? "arrow",
+              true,
+              appState.currentItemTailArrowhead ?? "arrow",
+            )}
+            onChange={(value) => updateData({ type: value })}
           />
         </div>
       </fieldset>

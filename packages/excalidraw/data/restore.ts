@@ -218,6 +218,7 @@ export const AllowedExcalidrawActiveTools: Record<
   rectangle: true,
   diamond: true,
   ellipse: true,
+  callout: true,
   line: true,
   image: true,
   arrow: true,
@@ -702,6 +703,19 @@ export const restoreElement = (
 
       return handleOversizedLinearElements(normalizedRestoredElement);
     }
+
+    case "callout":
+      return restoreElementWithProperties(element, {
+        tailAttachment: element.tailAttachment ?? 0.625,
+        tailTip:
+          element.tailTip ??
+          pointFrom<LocalPoint>(element.width / 2, element.height + 40),
+        tailCurve: element.tailCurve ?? 0.3,
+        tailArrowhead:
+          element.tailArrowhead === undefined
+            ? "arrow"
+            : normalizeArrowhead(element.tailArrowhead),
+      });
 
     // generic elements
     case "ellipse":

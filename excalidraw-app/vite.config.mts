@@ -1,4 +1,5 @@
 import path from "path";
+
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import svgrPlugin from "vite-plugin-svgr";
@@ -7,6 +8,7 @@ import { VitePWA } from "vite-plugin-pwa";
 import checker from "vite-plugin-checker";
 import { createHtmlPlugin } from "vite-plugin-html";
 import Sitemap from "vite-plugin-sitemap";
+
 import { woff2BrowserPlugin } from "../scripts/woff2/woff2-vite-plugins";
 export default defineConfig(({ mode }) => {
   // To load .env variables
@@ -169,6 +171,8 @@ export default defineConfig(({ mode }) => {
         },
 
         workbox: {
+          // Increase limit to accommodate larger bundles (heic-to, pdfjs-dist)
+          maximumFileSizeToCacheInBytes: 15 * 1024 * 1024, // 15 MB
           // don't precache fonts, locales and separate chunks
           globIgnores: [
             "fonts.css",
@@ -230,7 +234,6 @@ export default defineConfig(({ mode }) => {
               },
             },
           ],
-          maximumFileSizeToCacheInBytes: 2.3 * 1024 ** 2, // 2.3MB
         },
         manifest: {
           short_name: "Excalidraw",

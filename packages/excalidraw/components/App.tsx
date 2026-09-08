@@ -37,6 +37,7 @@ import {
   EVENT,
   FRAME_STYLE,
   IMAGE_MIME_TYPES,
+  HEIC_MIME_TYPES,
   IMAGE_RENDER_TIMEOUT,
   LINE_CONFIRM_THRESHOLD,
   MIME_TYPES,
@@ -130,7 +131,12 @@ import {
   newIframeElement,
   newArrowElement,
   newElement,
+  newCalloutElement,
   newImageElement,
+  isCalloutElement,
+  isPointOnCalloutTailHandle,
+  isPointOnCalloutAttachmentHandle,
+  pointToPerimeterRatio,
   newLinearElement,
   newTextElement,
   refreshTextDimensions,
@@ -386,6 +392,9 @@ import {
 } from "../data/blob";
 
 import { fileOpen } from "../data/filesystem";
+import { isHeicFile, convertHeicToJpeg } from "../data/heicConverter";
+import { isPdfFile } from "../data/pdfUtils";
+
 import {
   showHyperlinkTooltip,
   hideHyperlinkToolip,
@@ -423,6 +432,9 @@ import { LassoTrail } from "../lasso";
 import { EraserTrail } from "../eraser";
 import { getShortcutKey } from "../shortcut";
 import { tryParseSpreadsheet } from "../charts";
+
+import { PDFPageSelector } from "./PDFPageSelector";
+import { ConvertingOverlay } from "./ConvertingOverlay";
 
 import ConvertElementTypePopup, {
   getConversionTypeFromElements,
@@ -711,6 +723,21 @@ class App extends React.Component<AppProps, AppState> {
     null;
 
   hitLinkElement?: NonDeletedExcalidrawElement;
+  // PDF import state
+  private pendingPdfFile: File | null = null;
+  private pendingPdfInsertPosition: { x: number; y: number } | null = null;
+  // HEIC conversion state - tracks elements being converted
+  private convertingElementIds: Set<string> = new Set();
+  // Tracks if we're currently dragging a callout's tail tip
+  private draggingCalloutTail: {
+    elementId: string;
+    startTip: [number, number];
+  } | null = null;
+  // Tracks if we're currently dragging a callout's attachment point
+  private draggingCalloutAttachment: {
+    elementId: string;
+    startRatio: number;
+  } | null = null;
   lastPointerDownEvent: React.PointerEvent<HTMLElement> | null = null;
   lastPointerUpEvent: React.PointerEvent<HTMLElement> | PointerEvent | null =
     null;
@@ -779,9 +806,22 @@ class App extends React.Component<AppProps, AppState> {
       getSceneElementsIncludingDeleted: this.getSceneElementsIncludingDeleted,
       getSceneElementsMapIncludingDeleted:
         this.getSceneElementsMapIncludingDeleted,
-      history: {
-        clear: this.resetHistory,
-      },
+      history: Object.defineProperty(
+        {
+          clear: this.resetHistory,
+          pause: () => this.history.pause(),
+          resume: () => this.history.resume(),
+          overrideState: (
+            undoEmpty: boolean,
+            redoEmpty: boolean,
+            onUndo?: () => void,
+            onRedo?: () => void,
+          ) => this.history.overrideState(undoEmpty, redoEmpty, onUndo, onRedo),
+          clearOverride: () => this.history.clearOverride(),
+        },
+        "isPaused",
+        { get: () => this.history.isPaused, enumerable: true },
+      ) as ExcalidrawImperativeAPI["history"],
       setViewport: this.viewport.setViewport,
       getViewportOffsets: this.viewport.getOffsets,
       getSceneElements: this.getSceneElements,
@@ -2681,6 +2721,20 @@ class App extends React.Component<AppProps, AppState> {
                             )}
                         </ExcalidrawActionManagerContext.Provider>
                         {this.renderEmbeddables()}
+                        {this.pendingPdfFile && (
+                          <PDFPageSelector
+                            file={this.pendingPdfFile}
+                            onPageSelected={this.handlePdfPageSelected}
+                            onCancel={this.handlePdfCancel}
+                          />
+                        )}
+                        {this.convertingElementIds.size > 0 && (
+                          <ConvertingOverlay
+                            convertingElementIds={this.convertingElementIds}
+                            elementsMap={this.scene.getNonDeletedElementsMap()}
+                            appState={this.state}
+                          />
+                        )}
                       </ExcalidrawElementsContext.Provider>
                     </ExcalidrawAppStateContext.Provider>
                   </ExcalidrawSetAppStateContext.Provider>
@@ -6687,6 +6741,13 @@ class App extends React.Component<AppProps, AppState> {
       return true;
     }
 
+    // Check if hitting a callout's tail tip (which is outside the element bounds)
+    if (isCalloutElement(element)) {
+      if (isPointOnCalloutTailHandle(element, x, y, this.state.zoom.value)) {
+        return true;
+      }
+    }
+
     return hitElementItself({
       point: pointFrom(x, y),
       element,
@@ -8829,6 +8890,8 @@ class App extends React.Component<AppProps, AppState> {
       // mode this branch is unreachable:
       // `handleCanvasPanUsingWheelOrSpaceDrag` swallows the pointer-down.
       this.bucketFill.handlePointerDown(scenePointer);
+    } else if (this.state.activeTool.type === "callout") {
+      this.createCalloutElementOnPointerDown(pointerDownState);
     } else if (
       this.state.activeTool.type !== "eraser" &&
       this.state.activeTool.type !== "hand" &&
@@ -9457,6 +9520,59 @@ class App extends React.Component<AppProps, AppState> {
               });
               return false;
             }
+          }
+        }
+
+        // Check for callout attachment point handle hit (check before tail since it's on perimeter)
+        if (
+          selectedElements.length === 1 &&
+          isCalloutElement(selectedElements[0])
+        ) {
+          const calloutElement = selectedElements[0];
+          if (
+            !calloutElement.locked &&
+            isPointOnCalloutAttachmentHandle(
+              calloutElement,
+              pointerDownState.origin.x,
+              pointerDownState.origin.y,
+              this.state.zoom.value,
+            )
+          ) {
+            // We're clicking on the callout attachment handle
+            this.draggingCalloutAttachment = {
+              elementId: calloutElement.id,
+              startRatio: calloutElement.tailAttachment,
+            };
+            pointerDownState.hit.element = calloutElement;
+            // Block normal element dragging while we're dragging the attachment
+            pointerDownState.drag.blockDragging = true;
+          }
+        }
+
+        // Check for callout tail handle hit
+        if (
+          selectedElements.length === 1 &&
+          isCalloutElement(selectedElements[0])
+        ) {
+          const calloutElement = selectedElements[0];
+          if (
+            !calloutElement.locked &&
+            !this.draggingCalloutAttachment && // Don't check tail if already dragging attachment
+            isPointOnCalloutTailHandle(
+              calloutElement,
+              pointerDownState.origin.x,
+              pointerDownState.origin.y,
+              this.state.zoom.value,
+            )
+          ) {
+            // We're clicking on the callout tail handle
+            this.draggingCalloutTail = {
+              elementId: calloutElement.id,
+              startTip: [calloutElement.tailTip[0], calloutElement.tailTip[1]],
+            };
+            pointerDownState.hit.element = calloutElement;
+            // Block normal element dragging while we're dragging the tail
+            pointerDownState.drag.blockDragging = true;
           }
         }
 
@@ -10499,6 +10615,49 @@ class App extends React.Component<AppProps, AppState> {
     });
   };
 
+  private createCalloutElementOnPointerDown = (
+    pointerDownState: PointerDownState,
+  ): void => {
+    const [gridX, gridY] = getGridPoint(
+      pointerDownState.origin.x,
+      pointerDownState.origin.y,
+      this.lastPointerDownEvent?.[KEYS.CTRL_OR_CMD]
+        ? null
+        : this.getEffectiveGridSize(),
+    );
+
+    const topLayerFrame = this.getTopLayerFrameAtSceneCoords({
+      x: gridX,
+      y: gridY,
+    });
+
+    const element = newCalloutElement({
+      type: "callout",
+      x: gridX,
+      y: gridY,
+      strokeColor: this.state.currentItemStrokeColor,
+      backgroundColor: this.state.currentItemBackgroundColor,
+      fillStyle: this.state.currentItemFillStyle,
+      strokeWidth: this.getCurrentItemStrokeWidth("callout"),
+      strokeStyle: this.state.currentItemStrokeStyle,
+      roughness: this.state.currentItemRoughness,
+      opacity: this.state.currentItemOpacity,
+      roundness:
+        this.state.currentItemRoundness === "round"
+          ? { type: ROUNDNESS.ADAPTIVE_RADIUS }
+          : null,
+      locked: false,
+      frameId: topLayerFrame ? topLayerFrame.id : null,
+    });
+
+    this.scene.insertElement(element);
+
+    this.setState({
+      multiElement: null,
+      newElement: element,
+    });
+  };
+
   private maybeCacheReferenceSnapPoints(
     event: KeyboardModifiersObject,
     selectedElements: readonly NonDeletedExcalidrawElement[],
@@ -10693,6 +10852,78 @@ class App extends React.Component<AppProps, AppState> {
           return true;
         }
       }
+
+      // Handle callout attachment point dragging
+      if (this.draggingCalloutAttachment) {
+        const calloutElement = this.scene
+          .getNonDeletedElementsMap()
+          .get(this.draggingCalloutAttachment.elementId);
+        if (calloutElement && isCalloutElement(calloutElement)) {
+          // Calculate the pointer position in local coordinates
+          const cx = calloutElement.x + calloutElement.width / 2;
+          const cy = calloutElement.y + calloutElement.height / 2;
+
+          // Rotate pointer position around center (inverse rotation)
+          const cos = Math.cos(-calloutElement.angle);
+          const sin = Math.sin(-calloutElement.angle);
+          const dx = pointerCoords.x - cx;
+          const dy = pointerCoords.y - cy;
+          const rotatedX = cx + dx * cos - dy * sin;
+          const rotatedY = cy + dx * sin + dy * cos;
+
+          // Convert to local coordinates (relative to element top-left)
+          const localX = rotatedX - calloutElement.x;
+          const localY = rotatedY - calloutElement.y;
+
+          // Find nearest perimeter point and convert to ratio
+          const newRatio = pointToPerimeterRatio(
+            pointFrom<LocalPoint>(localX, localY),
+            calloutElement.width,
+            calloutElement.height,
+            calloutElement.roundness,
+          );
+
+          this.scene.mutateElement(calloutElement, {
+            tailAttachment: newRatio,
+          });
+        }
+        return;
+      }
+
+      // Handle callout tail dragging
+      if (this.draggingCalloutTail) {
+        const calloutElement = this.scene
+          .getNonDeletedElementsMap()
+          .get(this.draggingCalloutTail.elementId);
+        if (calloutElement && isCalloutElement(calloutElement)) {
+          // Calculate the new tail tip in local coordinates
+          // The element rotates around its center, so we need to:
+          // 1. Get the element center
+          // 2. Rotate the pointer position around the center (inverse rotation)
+          // 3. Convert to local coordinates
+
+          const cx = calloutElement.x + calloutElement.width / 2;
+          const cy = calloutElement.y + calloutElement.height / 2;
+
+          // Rotate pointer position around center (inverse rotation)
+          const cos = Math.cos(-calloutElement.angle);
+          const sin = Math.sin(-calloutElement.angle);
+          const dx = pointerCoords.x - cx;
+          const dy = pointerCoords.y - cy;
+          const rotatedX = cx + dx * cos - dy * sin;
+          const rotatedY = cy + dx * sin + dy * cos;
+
+          // Convert to local coordinates (relative to element top-left)
+          const localX = rotatedX - calloutElement.x;
+          const localY = rotatedY - calloutElement.y;
+
+          this.scene.mutateElement(calloutElement, {
+            tailTip: pointFrom<LocalPoint>(localX, localY),
+          });
+        }
+        return;
+      }
+
       const elementsMap = this.scene.getNonDeletedElementsMap();
 
       if (this.state.selectedLinearElement) {
@@ -11557,6 +11788,10 @@ class App extends React.Component<AppProps, AppState> {
         snapLines: updateStable(prevState.snapLines, []),
         originSnapOffset: null,
       }));
+
+      // Reset callout dragging states
+      this.draggingCalloutTail = null;
+      this.draggingCalloutAttachment = null;
 
       // just in case, tool changes mid drag, always clean up
       this.lassoTrail.endPath();
@@ -12783,15 +13018,132 @@ class App extends React.Component<AppProps, AppState> {
         this.state,
       );
 
-      const imageFiles = await fileOpen({
+      // Build extensions list including HEIC and PDF
+      // These must be valid keys in MIME_TYPES
+      const extensions = [
+        ...Object.keys(IMAGE_MIME_TYPES),
+        ...Object.keys(HEIC_MIME_TYPES),
+        "pdf",
+      ] as (
+        | keyof typeof IMAGE_MIME_TYPES
+        | keyof typeof HEIC_MIME_TYPES
+        | "pdf"
+      )[];
+
+      const selectedFiles = await fileOpen({
         description: "Image",
-        extensions: Object.keys(
-          IMAGE_MIME_TYPES,
-        ) as (keyof typeof IMAGE_MIME_TYPES)[],
+        extensions,
         multiple: true,
       });
 
-      this.insertImages(imageFiles, x, y);
+      // Separate files by type
+      const pdfFiles: File[] = [];
+      const heicFiles: File[] = [];
+      const regularFiles: File[] = [];
+
+      for (const file of selectedFiles) {
+        if (isPdfFile(file)) {
+          pdfFiles.push(file);
+        } else if (isHeicFile(file)) {
+          heicFiles.push(file);
+        } else {
+          regularFiles.push(file);
+        }
+      }
+
+      // Insert regular images immediately (no conversion needed)
+      if (regularFiles.length > 0) {
+        this.insertImages(regularFiles, x, y);
+      }
+
+      // Handle HEIC files - show overlay while converting
+      if (heicFiles.length > 0) {
+        const heicX = regularFiles.length > 0 ? x + 100 : x;
+
+        // Create placeholders and insert them
+        const gridPadding = 50 / this.state.zoom.value;
+        const placeholders = positionElementsOnGrid(
+          heicFiles.map(() =>
+            this.newImagePlaceholder({ sceneX: heicX, sceneY: y }),
+          ),
+          heicX,
+          y,
+          gridPadding,
+        );
+
+        // Insert placeholder elements and track them as converting
+        placeholders.forEach((el) => {
+          this.scene.insertElement(el);
+          this.convertingElementIds.add(el.id);
+        });
+
+        // Force render to show placeholders with overlay
+        this.scene.triggerUpdate();
+        this.forceUpdate();
+
+        // Convert HEIC files and replace placeholders one by one
+        for (let i = 0; i < heicFiles.length; i++) {
+          const file = heicFiles[i];
+          const placeholder = placeholders[i];
+
+          try {
+            const convertedFile = await convertHeicToJpeg(file);
+
+            // Initialize the real image in place of the placeholder
+            const realImage = await this.initializeImage(
+              placeholder,
+              await normalizeFile(convertedFile),
+            );
+
+            // Remove from converting set
+            this.convertingElementIds.delete(placeholder.id);
+
+            // Update the scene with the real image
+            const nextElements = this.scene
+              .getElementsIncludingDeleted()
+              .map((el) => (el.id === placeholder.id ? realImage : el));
+
+            this.updateScene({
+              elements: nextElements,
+              captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+            });
+            this.forceUpdate();
+          } catch (error) {
+            console.error("Failed to convert HEIC file:", error);
+            // Remove from converting set
+            this.convertingElementIds.delete(placeholder.id);
+            // Remove failed placeholder
+            const nextElements = this.scene
+              .getElementsIncludingDeleted()
+              .map((el) =>
+                el.id === placeholder.id
+                  ? newElementWith(el, { isDeleted: true })
+                  : el,
+              );
+            this.updateScene({
+              elements: nextElements,
+              captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+            });
+            this.forceUpdate();
+
+            this.setState({
+              errorMessage:
+                error instanceof Error
+                  ? error.message
+                  : `Failed to convert HEIC image: ${file.name}`,
+            });
+          }
+        }
+      }
+
+      // Handle PDF files - show selector for the first one
+      // (multiple PDFs handled one at a time)
+      if (pdfFiles.length > 0) {
+        this.pendingPdfFile = pdfFiles[0];
+        this.pendingPdfInsertPosition = { x, y };
+        // Force re-render to show PDF selector
+        this.forceUpdate();
+      }
     } catch (error: any) {
       if (error.name !== "AbortError") {
         console.error(error);
@@ -12810,6 +13162,25 @@ class App extends React.Component<AppProps, AppState> {
         },
       );
     }
+  };
+
+  private handlePdfPageSelected = (imageFile: File) => {
+    if (this.pendingPdfInsertPosition) {
+      this.insertImages(
+        [imageFile],
+        this.pendingPdfInsertPosition.x,
+        this.pendingPdfInsertPosition.y,
+      );
+    }
+    this.pendingPdfFile = null;
+    this.pendingPdfInsertPosition = null;
+    this.forceUpdate();
+  };
+
+  private handlePdfCancel = () => {
+    this.pendingPdfFile = null;
+    this.pendingPdfInsertPosition = null;
+    this.forceUpdate();
   };
 
   private getImageNaturalDimensions = (
@@ -13075,12 +13446,125 @@ class App extends React.Component<AppProps, AppState> {
       }
     }
 
-    const imageFiles = fileItems
+    // Collect all files that could be images (including HEIC and PDF)
+    const allFiles = fileItems
       .map((data) => data.file)
-      .filter((file) => isSupportedImageFile(file));
+      .filter((file): file is File => file !== null);
 
-    if (imageFiles.length > 0 && this.isToolSupported("image")) {
-      return this.insertImages(imageFiles, sceneX, sceneY);
+    // Separate files by type
+    const regularImageFiles: File[] = [];
+    const heicFiles: File[] = [];
+    const pdfFiles: File[] = [];
+
+    for (const file of allFiles) {
+      if (isSupportedImageFile(file)) {
+        regularImageFiles.push(file);
+      } else if (isHeicFile(file)) {
+        heicFiles.push(file);
+      } else if (isPdfFile(file)) {
+        pdfFiles.push(file);
+      }
+    }
+
+    // Insert regular images immediately
+    if (regularImageFiles.length > 0 && this.isToolSupported("image")) {
+      this.insertImages(regularImageFiles, sceneX, sceneY);
+    }
+
+    // Handle HEIC files - show overlay while converting
+    if (heicFiles.length > 0 && this.isToolSupported("image")) {
+      const heicX = regularImageFiles.length > 0 ? sceneX + 100 : sceneX;
+
+      // Create placeholders and insert them
+      const gridPadding = 50 / this.state.zoom.value;
+      const placeholders = positionElementsOnGrid(
+        heicFiles.map(() =>
+          this.newImagePlaceholder({ sceneX: heicX, sceneY }),
+        ),
+        heicX,
+        sceneY,
+        gridPadding,
+      );
+
+      // Insert placeholder elements and track them as converting
+      placeholders.forEach((el) => {
+        this.scene.insertElement(el);
+        this.convertingElementIds.add(el.id);
+      });
+
+      // Force render to show placeholders with overlay
+      this.scene.triggerUpdate();
+      this.forceUpdate();
+
+      // Convert HEIC files and replace placeholders one by one
+      for (let i = 0; i < heicFiles.length; i++) {
+        const file = heicFiles[i];
+        const placeholder = placeholders[i];
+
+        try {
+          const convertedFile = await convertHeicToJpeg(file);
+
+          // Initialize the real image in place of the placeholder
+          const realImage = await this.initializeImage(
+            placeholder,
+            await normalizeFile(convertedFile),
+          );
+
+          // Remove from converting set
+          this.convertingElementIds.delete(placeholder.id);
+
+          // Update the scene with the real image
+          const nextElements = this.scene
+            .getElementsIncludingDeleted()
+            .map((el) => (el.id === placeholder.id ? realImage : el));
+
+          this.updateScene({
+            elements: nextElements,
+            captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+          });
+          this.forceUpdate();
+        } catch (error) {
+          console.error("Failed to convert HEIC file:", error);
+          // Remove from converting set
+          this.convertingElementIds.delete(placeholder.id);
+          // Remove failed placeholder
+          const nextElements = this.scene
+            .getElementsIncludingDeleted()
+            .map((el) =>
+              el.id === placeholder.id
+                ? newElementWith(el, { isDeleted: true })
+                : el,
+            );
+          this.updateScene({
+            elements: nextElements,
+            captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+          });
+          this.forceUpdate();
+
+          this.setState({
+            errorMessage:
+              error instanceof Error
+                ? error.message
+                : "Failed to convert HEIC image",
+          });
+        }
+      }
+    }
+
+    // Check if we handled any images
+    const handledImages = regularImageFiles.length > 0 || heicFiles.length > 0;
+
+    // Handle PDF files - show selector for the first one
+    if (pdfFiles.length > 0 && this.isToolSupported("image")) {
+      this.pendingPdfFile = pdfFiles[0];
+      this.pendingPdfInsertPosition = { x: sceneX, y: sceneY };
+      this.forceUpdate();
+      return;
+    }
+
+    // If we handled any images, return early
+    if (handledImages) {
+      return;
     }
     const excalidrawLibrary_ids = dataTransferList.getData(
       MIME_TYPES.excalidrawlibIds,

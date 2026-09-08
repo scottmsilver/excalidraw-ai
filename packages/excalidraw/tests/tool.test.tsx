@@ -39,6 +39,22 @@ describe("setActiveTool()", () => {
     expect(excalidrawAPI.setActiveTool).toBe(h.app.setActiveTool);
   });
 
+  it("exposes AI history controls on the mounted editor API", () => {
+    expect(excalidrawAPI.history.isPaused).toBe(false);
+    act(() => excalidrawAPI.history.pause());
+    expect(excalidrawAPI.history.isPaused).toBe(true);
+    expect(h.history.isPaused).toBe(true);
+    act(() => excalidrawAPI.history.resume());
+    expect(excalidrawAPI.history.isPaused).toBe(false);
+
+    act(() => excalidrawAPI.history.overrideState(false, false));
+    expect(h.history.isUndoStackEmpty).toBe(false);
+    expect(h.history.isRedoStackEmpty).toBe(false);
+    act(() => excalidrawAPI.history.clearOverride());
+    expect(h.history.isUndoStackEmpty).toBe(true);
+    expect(h.history.isRedoStackEmpty).toBe(true);
+  });
+
   it("should set the active tool type", async () => {
     expect(h.state.activeTool.type).toBe("selection");
     act(() => {
