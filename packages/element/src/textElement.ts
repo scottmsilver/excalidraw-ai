@@ -19,12 +19,14 @@ import {
   updateOriginalContainerCache,
 } from "./containerCache";
 import { LinearElementEditor } from "./linearElementEditor";
+import { preserveCalloutTip, transformWholeCallout } from "./calloutTransform";
 
 import { measureText } from "./textMeasurements";
 import { wrapText } from "./textWrapping";
 import {
   isBoundToContainer,
   isArrowElement,
+  isCalloutElement,
   isTextElement,
 } from "./typeChecks";
 
@@ -109,7 +111,12 @@ export const redrawTextBoundingBox = (
         metrics.height,
         container.type,
       );
-      scene.mutateElement(container, { height: nextHeight });
+      scene.mutateElement(container, {
+        height: nextHeight,
+        ...(isCalloutElement(container)
+          ? preserveCalloutTip(container, { height: nextHeight })
+          : {}),
+      });
       updateOriginalContainerCache(container.id, nextHeight);
     }
 
@@ -118,7 +125,12 @@ export const redrawTextBoundingBox = (
         metrics.width,
         container.type,
       );
-      scene.mutateElement(container, { width: nextWidth });
+      scene.mutateElement(container, {
+        width: nextWidth,
+        ...(isCalloutElement(container)
+          ? preserveCalloutTip(container, { width: nextWidth })
+          : {}),
+      });
     }
 
     const updatedTextElement = {
@@ -145,6 +157,7 @@ export const handleBindTextResize = (
   transformHandleType: MaybeTransformHandleType,
   shouldMaintainAspectRatio = false,
   shouldResizeFromCenter = false,
+  calloutSelectionMode: "box" | "whole" = "box",
 ) => {
   const elementsMap = scene.getNonDeletedElementsMap();
   const boundTextElementId = getBoundTextElementId(container);
@@ -208,6 +221,18 @@ export const handleBindTextResize = (
       scene.mutateElement(container, {
         height: containerHeight,
         y: container.y - offsetY,
+        ...(isCalloutElement(container)
+          ? calloutSelectionMode === "whole"
+            ? transformWholeCallout(container, container, {
+                ...container,
+                height: containerHeight,
+                y: container.y - offsetY,
+              })
+            : preserveCalloutTip(container, {
+                height: containerHeight,
+                y: container.y - offsetY,
+              })
+          : {}),
       });
     }
 

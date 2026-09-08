@@ -40,6 +40,7 @@ import {
   isNonDeletedElement,
 } from "@excalidraw/element";
 import { normalizeFixedPoint } from "@excalidraw/element";
+import { restoreCalloutAppearance } from "@excalidraw/element/calloutAppearance";
 import {
   updateElbowArrowPoints,
   validateElbowPoints,
@@ -706,6 +707,7 @@ export const restoreElement = (
 
     case "callout":
       return restoreElementWithProperties(element, {
+        ...restoreCalloutAppearance(element),
         tailAttachment: element.tailAttachment ?? 0.625,
         tailTip:
           element.tailTip ??

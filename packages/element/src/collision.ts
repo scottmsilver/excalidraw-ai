@@ -63,6 +63,8 @@ import { getBindingGap } from "./binding";
 
 import { hasBackground } from "./comparisons";
 
+import { isPointOnCalloutShaft } from "./calloutTransform";
+
 import type {
   ElementsMap,
   ExcalidrawArrowElement,
@@ -80,6 +82,9 @@ import type {
 } from "./types";
 
 export const shouldTestInside = (element: ExcalidrawElement) => {
+  if (element.type === "callout") {
+    return true;
+  }
   if (element.type === "arrow") {
     return false;
   }
@@ -137,6 +142,12 @@ export const hitElementItself = ({
   frameNameBound = null,
   overrideShouldTestInside = false,
 }: HitTestArgs) => {
+  if (
+    element.type === "callout" &&
+    isPointOnCalloutShaft(element, point, threshold)
+  ) {
+    return true;
+  }
   // Return cached result if the same point and element version is tested again.
   // A cached hit stays valid for any larger threshold, while a cached miss
   // stays valid only for a threshold no larger than the cached one (a larger

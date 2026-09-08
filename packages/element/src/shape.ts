@@ -67,6 +67,7 @@ import {
 import { shouldTestInside } from "./collision";
 
 import { getCalloutTailPoints, getCalloutTailArrowheadPoints } from "./callout";
+import { calloutFillColor } from "./calloutAppearance";
 
 import type {
   ExcalidrawElement,
@@ -995,6 +996,20 @@ const _generateElementShape = (
     case "callout": {
       const shapes: ElementShapes[typeof element.type] = [];
       const options = generateRoughOptions(element, false, isDarkMode);
+      const resolved = element.calloutResolvedStyle;
+      if (resolved) {
+        options.stroke = resolved.foreground;
+        options.fill = calloutFillColor(
+          resolved.background,
+          resolved.backgroundOpacity,
+        );
+        options.fillStyle = "solid";
+      } else if (element.calloutBackgroundOpacity !== undefined) {
+        options.fill = calloutFillColor(
+          options.fill || "transparent",
+          element.calloutBackgroundOpacity,
+        );
+      }
 
       // Generate rectangle body (similar to rectangle case)
       if (element.roundness) {
@@ -1008,7 +1023,7 @@ const _generateElementShape = (
             } Q ${w} ${h}, ${w - r} ${h} L ${r} ${h} Q 0 ${h}, 0 ${
               h - r
             } L 0 ${r} Q 0 0, ${r} 0`,
-            generateRoughOptions(element, true, isDarkMode),
+            { ...options, preserveVertices: true },
           ),
         );
       } else {
@@ -1054,6 +1069,19 @@ const _generateElementShape = (
               getCalloutTailArrowheadPoints(element, arrowhead, offset),
           ),
         );
+      }
+      if (resolved?.halo) {
+        const haloShapes = shapes.map((shape) => ({
+          ...shape,
+          options: {
+            ...shape.options,
+            stroke: resolved.halo!,
+            strokeWidth: shape.options.strokeWidth + 3,
+            fill: undefined,
+          },
+          sets: shape.sets.filter((set) => set.type === "path"),
+        }));
+        return [...haloShapes, ...shapes];
       }
       return shapes;
     }

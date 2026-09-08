@@ -18,6 +18,7 @@ import type {
 import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 
 import { unbindBindingElement, updateBoundElements } from "./binding";
+import { preserveCalloutTip } from "./calloutTransform";
 import { getCommonBounds } from "./bounds";
 import { getPerfectElementSize } from "./sizeHelpers";
 import { getBoundTextElement } from "./textElement";
@@ -45,6 +46,7 @@ export const dragSelectedElements = (
     y: number;
   },
   gridSize: NullableGridSize,
+  calloutSelectionMode: AppState["calloutSelectionMode"] = "whole",
 ) => {
   if (
     _selectedElements.length === 1 &&
@@ -124,7 +126,17 @@ export const dragSelectedElements = (
         : false);
 
     if (!isArrowElement(element)) {
-      updateElementCoords(pointerDownState, element, scene, adjustedOffset);
+      updateElementCoords(
+        pointerDownState,
+        element,
+        scene,
+        adjustedOffset,
+        selectedElements.length === 1 &&
+          selectedElements[0].id === element.id &&
+          isCalloutElement(element) &&
+          !element.groupIds.length &&
+          calloutSelectionMode === "box",
+      );
 
       // skip arrow labels since we calculate its position during render
       const textElement = getBoundTextElement(
@@ -209,6 +221,7 @@ const updateElementCoords = (
   element: ExcalidrawElement,
   scene: Scene,
   dragOffset: { x: number; y: number },
+  anchorCallout = false,
 ) => {
   const originalElement =
     pointerDownState.originalElements.get(element.id) ?? element;
@@ -219,6 +232,9 @@ const updateElementCoords = (
   scene.mutateElement(element, {
     x: nextX,
     y: nextY,
+    ...(anchorCallout && isCalloutElement(originalElement)
+      ? preserveCalloutTip(originalElement, { x: nextX, y: nextY })
+      : {}),
   });
 };
 

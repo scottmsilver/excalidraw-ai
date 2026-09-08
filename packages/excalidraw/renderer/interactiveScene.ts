@@ -58,6 +58,7 @@ import {
 import { renderSelectionElement } from "@excalidraw/element";
 
 import { getCommonBounds, getElementAbsoluteCoords } from "@excalidraw/element";
+import { getCalloutSelectionFrame } from "@excalidraw/element/calloutTransform";
 import {
   getGlobalFixedPointForBindableElement,
   isFocusPointVisible,
@@ -2013,7 +2014,12 @@ const _renderInteractiveScene = ({
 
         if (selectionColors.length) {
           const [x1, y1, x2, y2, cx, cy] = getElementAbsoluteCoords(
-            element,
+            isCalloutElement(element) &&
+              selectedElements.length === 1 &&
+              (appState.calloutSelectionMode === "whole" ||
+                element.groupIds.length)
+              ? getCalloutSelectionFrame(element)
+              : element,
             elementsMap,
             true,
           );
@@ -2085,6 +2091,7 @@ const _renderInteractiveScene = ({
         elementsMap,
         "mouse", // when we render we don't know which pointer type so use mouse,
         getOmitSidesForEditorInterface(editorInterface),
+        appState.calloutSelectionMode,
       );
       if (
         !appState.viewModeEnabled &&

@@ -194,6 +194,7 @@ const handleDimensionChange: DragInputCallbackType<
         property === "width" ? "e" : "s",
         {
           shouldMaintainAspectRatio: keepAspectRatio,
+          calloutSelectionMode: app.state.calloutSelectionMode,
         },
       );
 
@@ -262,6 +263,7 @@ const handleDimensionChange: DragInputCallbackType<
         property === "width" ? "e" : "s",
         {
           shouldMaintainAspectRatio: keepAspectRatio,
+          calloutSelectionMode: app.state.calloutSelectionMode,
         },
       );
 

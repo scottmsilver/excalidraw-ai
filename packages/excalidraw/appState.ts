@@ -94,6 +94,7 @@ export const getDefaultAppState = (): Omit<
     scrollY: 0,
     scrollConstraints: null,
     selectedElementIds: {},
+    calloutSelectionMode: "box",
     hoveredElementIds: {},
     selectedGroupIds: {},
     selectedElementsAreBeingDragged: false,
@@ -235,6 +236,7 @@ const APP_STATE_STORAGE_CONF = (<
   scrollY: { browser: true, export: false, server: false },
   scrollConstraints: { browser: false, export: false, server: false },
   selectedElementIds: { browser: true, export: false, server: false },
+  calloutSelectionMode: { browser: false, export: false, server: false },
   hoveredElementIds: { browser: false, export: false, server: false },
   selectedGroupIds: { browser: true, export: false, server: false },
   selectedElementsAreBeingDragged: {

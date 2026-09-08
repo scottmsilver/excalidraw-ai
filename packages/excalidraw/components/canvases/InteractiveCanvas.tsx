@@ -231,6 +231,7 @@ const InteractiveCanvas = (props: InteractiveCanvasProps) => {
 const getRelevantAppStateProps = (
   appState: AppState,
 ): InteractiveCanvasAppState => ({
+  calloutSelectionMode: appState.calloutSelectionMode,
   zoom: appState.zoom,
   scrollX: appState.scrollX,
   scrollY: appState.scrollY,

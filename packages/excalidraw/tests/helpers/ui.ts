@@ -369,6 +369,7 @@ const transform = (
       arrayToMap(h.elements),
       "mouse",
       {},
+      h.state.calloutSelectionMode,
     )[handle];
   } else {
     const [x1, y1, x2, y2] = getCommonBounds(elements);

@@ -22,6 +22,8 @@ import {
 } from "@excalidraw/element";
 
 import { LinearElementEditor } from "@excalidraw/element";
+import { preserveCalloutTip } from "@excalidraw/element/calloutTransform";
+import { isCalloutElement } from "@excalidraw/element";
 import { bumpVersion } from "@excalidraw/element";
 import {
   getBoundTextElementId,
@@ -45,6 +47,8 @@ import {
   isBoundToContainer,
   isTextElement,
 } from "@excalidraw/element";
+
+import { getCalloutTextColor } from "@excalidraw/element/calloutAppearance";
 
 import type {
   ExcalidrawLinearElement,
@@ -339,7 +343,12 @@ export const textWysiwyg = ({
             container.type,
           );
 
-          app.scene.mutateElement(container, { height: targetContainerHeight });
+          app.scene.mutateElement(container, {
+            height: targetContainerHeight,
+            ...(isCalloutElement(container)
+              ? preserveCalloutTip(container, { height: targetContainerHeight })
+              : {}),
+          });
           updateBoundElements(container, app.scene);
           return;
         } else if (
@@ -353,7 +362,12 @@ export const textWysiwyg = ({
             height,
             container.type,
           );
-          app.scene.mutateElement(container, { height: targetContainerHeight });
+          app.scene.mutateElement(container, {
+            height: targetContainerHeight,
+            ...(isCalloutElement(container)
+              ? preserveCalloutTip(container, { height: targetContainerHeight })
+              : {}),
+          });
           updateBoundElements(container, app.scene);
         } else {
           const { x, y } = computeBoundTextPosition(
@@ -401,10 +415,15 @@ export const textWysiwyg = ({
         ),
         textAlign,
         verticalAlign,
-        color: applyDarkModeFilter(
-          updatedTextElement.strokeColor,
-          appState.theme === THEME.DARK,
-        ),
+        color:
+          getCalloutTextColor(
+            updatedTextElement,
+            app.scene.getNonDeletedElementsMap(),
+          ) ??
+          applyDarkModeFilter(
+            updatedTextElement.strokeColor,
+            appState.theme === THEME.DARK,
+          ),
         opacity: updatedTextElement.opacity / 100,
         maxHeight: `${editorMaxHeight}px`,
       });

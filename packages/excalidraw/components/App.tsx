@@ -265,6 +265,11 @@ import {
   isNonDeletedElement,
   DEFAULT_BOUND_TEXT_LABEL_POSITION,
 } from "@excalidraw/element";
+import {
+  preserveCalloutTip,
+  calloutWorldToLocal,
+  isPointOnCalloutShaft,
+} from "@excalidraw/element/calloutTransform";
 
 import type { GlobalPoint, LocalPoint, Radians } from "@excalidraw/math";
 
@@ -417,6 +422,7 @@ import {
   isGridModeEnabled,
 } from "../snapping";
 import { Renderer } from "../scene/Renderer";
+import { CalloutAutoStyleController } from "../scene/calloutAutoStyle";
 import {
   type SetViewportOptions,
   getViewportForZoomWithScrollConstraints,
@@ -4205,6 +4211,8 @@ class App extends React.Component<AppProps, AppState> {
     }
   }
 
+  private calloutAutoStyles = new CalloutAutoStyleController();
+
   componentDidUpdate(prevProps: AppProps, prevState: AppState) {
     // must be updated *before* state change listeners are triggered below
     if (!this._initialized && !this.state.isLoading) {
@@ -4379,6 +4387,17 @@ class App extends React.Component<AppProps, AppState> {
         : !this.visibleElements.length && this.hasRenderableElements;
     if (this.state.scrolledOutside !== scrolledOutside) {
       this.setState({ scrolledOutside });
+    }
+
+    if (
+      this.calloutAutoStyles.resolve(
+        this.scene.getNonDeletedElements(),
+        this.state,
+        this.imageCache,
+        this.ownerDocument,
+      )
+    ) {
+      this.scene.triggerUpdate();
     }
 
     this.store.commit(elementsMap, this.state);
@@ -5784,11 +5803,24 @@ class App extends React.Component<AppProps, AppState> {
         }
 
         selectedElements.forEach((element) => {
+          if (isCalloutElement(element) && element.locked) {
+            return;
+          }
           this.scene.mutateElement(
             element,
             {
               x: element.x + offsetX,
               y: element.y + offsetY,
+              ...(isCalloutElement(element) &&
+              selectedElements.filter((el) => !isBoundToContainer(el))
+                .length === 1 &&
+              !element.groupIds.length &&
+              this.state.calloutSelectionMode === "box"
+                ? preserveCalloutTip(element, {
+                    x: element.x + offsetX,
+                    y: element.y + offsetY,
+                  })
+                : {}),
             },
             { informMutation: false, isDragging: false },
           );
@@ -6743,6 +6775,15 @@ class App extends React.Component<AppProps, AppState> {
 
     // Check if hitting a callout's tail tip (which is outside the element bounds)
     if (isCalloutElement(element)) {
+      if (
+        isPointOnCalloutShaft(
+          element,
+          [x, y],
+          this.getElementHitThreshold(element),
+        )
+      ) {
+        return true;
+      }
       if (isPointOnCalloutTailHandle(element, x, y, this.state.zoom.value)) {
         return true;
       }
@@ -6922,6 +6963,12 @@ class App extends React.Component<AppProps, AppState> {
       this.scene.mutateElement(container, {
         height: newHeight,
         width: newWidth,
+        ...(isCalloutElement(container)
+          ? preserveCalloutTip(container, {
+              height: newHeight,
+              width: newWidth,
+            })
+          : {}),
       });
       sceneX = container.x + newWidth / 2;
       sceneY = container.y + newHeight / 2;
@@ -6985,7 +7032,12 @@ class App extends React.Component<AppProps, AppState> {
         strokeWidth: this.getCurrentItemStrokeWidth("text"),
         strokeStyle: this.state.currentItemStrokeStyle,
         roughness: this.state.currentItemRoughness,
-        opacity: this.state.currentItemOpacity,
+        opacity:
+          shouldBindToContainer &&
+          container?.type === "callout" &&
+          container.calloutAutoStyle
+            ? container.opacity
+            : this.state.currentItemOpacity,
         text: "",
         fontSize,
         fontFamily,
@@ -9449,6 +9501,7 @@ class App extends React.Component<AppProps, AppState> {
             elementsMap,
             pointerDownState.origin.x,
             pointerDownState.origin.y,
+            this.state.calloutSelectionMode,
           ),
         );
         if (
@@ -9658,6 +9711,32 @@ class App extends React.Component<AppProps, AppState> {
         pointerDownState.hit.allHitElements = unlockedHitElements;
 
         const hitElement = pointerDownState.hit.element;
+        if (
+          hitElement &&
+          isCalloutElement(hitElement) &&
+          !hitElement.locked &&
+          !this.draggingCalloutTail &&
+          !this.draggingCalloutAttachment
+        ) {
+          const local = calloutWorldToLocal(hitElement, [
+            pointerDownState.origin.x,
+            pointerDownState.origin.y,
+          ]);
+          const hitsBox =
+            local[0] >= 0 &&
+            local[0] <= hitElement.width &&
+            local[1] >= 0 &&
+            local[1] <= hitElement.height;
+          if (
+            hitsBox &&
+            this.state.selectedElementIds[hitElement.id] &&
+            this.state.calloutSelectionMode === "whole"
+          ) {
+            pointerDownState.hit.selectCalloutBoxOnPointerUp = true;
+          } else {
+            this.setState({ calloutSelectionMode: hitsBox ? "box" : "whole" });
+          }
+        }
         const someHitElementIsSelected =
           pointerDownState.hit.allHitElements.some((element) =>
             this.isASelectedElement(element),
@@ -10655,6 +10734,7 @@ class App extends React.Component<AppProps, AppState> {
     this.setState({
       multiElement: null,
       newElement: element,
+      calloutSelectionMode: "box",
     });
   };
 
@@ -11307,6 +11387,9 @@ class App extends React.Component<AppProps, AppState> {
               this.scene,
               snapOffset,
               event[KEYS.CTRL_OR_CMD] ? null : this.getEffectiveGridSize(),
+              event.altKey || pointerDownState.hit.hasBeenDuplicated
+                ? "whole"
+                : this.state.calloutSelectionMode,
             );
           }
 
@@ -11790,6 +11873,13 @@ class App extends React.Component<AppProps, AppState> {
       }));
 
       // Reset callout dragging states
+      if (
+        pointerDownState.hit.selectCalloutBoxOnPointerUp &&
+        !pointerDownState.drag.hasOccurred &&
+        childEvent.type === "pointerup"
+      ) {
+        this.setState({ calloutSelectionMode: "box" });
+      }
       this.draggingCalloutTail = null;
       this.draggingCalloutAttachment = null;
 
@@ -14122,6 +14212,7 @@ class App extends React.Component<AppProps, AppState> {
         resizeY,
         pointerDownState.resize.center.x,
         pointerDownState.resize.center.y,
+        this.state.calloutSelectionMode,
       )
     ) {
       const elementsToHighlight = new Set<NonDeletedExcalidrawElement>();

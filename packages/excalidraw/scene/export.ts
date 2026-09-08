@@ -58,6 +58,8 @@ import { Fonts } from "../fonts";
 import { renderStaticScene } from "../renderer/staticScene";
 import { renderSceneToSvg } from "../renderer/staticSvgScene";
 
+import { CalloutAutoStyleController } from "./calloutAutoStyle";
+
 import type { RenderableElementsMap } from "./types";
 
 import type { AppState, BinaryFiles } from "../types";
@@ -223,7 +225,11 @@ export const exportToCanvas = async (
     exportingFrame,
     exportWithDarkMode: appState.exportWithDarkMode,
     frameRendering,
-  });
+  }).map((element) =>
+    element.type === "callout" && element.calloutAutoStyle
+      ? { ...element }
+      : element,
+  );
 
   if (exportingFrame) {
     exportPadding = 0;
@@ -245,6 +251,19 @@ export const exportToCanvas = async (
     ),
     files,
   });
+
+  new CalloutAutoStyleController().resolve(
+    elementsForRender,
+    {
+      ...appState,
+      frameRendering,
+      theme: appState.exportWithDarkMode ? THEME.DARK : THEME.LIGHT,
+      viewBackgroundColor,
+    },
+    imageCache,
+    canvas.ownerDocument,
+    true,
+  );
 
   renderStaticScene({
     canvas,
@@ -332,7 +351,11 @@ export const exportToSvg = async (
     exportingFrame,
     exportWithDarkMode,
     frameRendering,
-  });
+  }).map((element) =>
+    element.type === "callout" && element.calloutAutoStyle
+      ? { ...element }
+      : element,
+  );
 
   if (exportingFrame) {
     exportPadding = 0;
@@ -351,6 +374,36 @@ export const exportToSvg = async (
   // ---------------------------------------------------------------------------
 
   const svgRoot = document.createElementNS(SVG_NS, "svg");
+
+  if (
+    elementsForRender.some(
+      (element) => element.type === "callout" && element.calloutAutoStyle,
+    )
+  ) {
+    const { imageCache } = await updateImageCache({
+      imageCache: new Map(),
+      fileIds: getInitializedImageElements(elementsForRender).map(
+        (element) => element.fileId,
+      ),
+      files: files || {},
+    });
+    new CalloutAutoStyleController().resolve(
+      elementsForRender,
+      {
+        ...getDefaultAppState(),
+        ...appState,
+        frameRendering,
+        width,
+        height,
+        offsetTop: 0,
+        offsetLeft: 0,
+        theme: exportWithDarkMode ? THEME.DARK : THEME.LIGHT,
+      },
+      imageCache,
+      svgRoot.ownerDocument,
+      true,
+    );
+  }
 
   svgRoot.setAttribute("version", "1.1");
   svgRoot.setAttribute("xmlns", SVG_NS);

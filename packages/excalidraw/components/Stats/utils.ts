@@ -1,4 +1,6 @@
 import { pointFrom, pointRotateRads } from "@excalidraw/math";
+import { preserveCalloutTip } from "@excalidraw/element/calloutTransform";
+import { isCalloutElement } from "@excalidraw/element";
 
 import {
   getBoundTextElement,
@@ -164,6 +166,12 @@ export const moveElement = (
     {
       x,
       y,
+      ...(isCalloutElement(originalElement) &&
+      !originalElement.groupIds.length &&
+      scene.getSelectedElements(appState).length === 1 &&
+      appState.calloutSelectionMode === "box"
+        ? preserveCalloutTip(originalElement, { x, y })
+        : {}),
     },
     { informMutation: shouldInformMutation, isDragging: false },
   );

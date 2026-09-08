@@ -37,6 +37,8 @@ import { ShapeCache } from "@excalidraw/element";
 
 import { getElementAbsoluteCoords } from "@excalidraw/element";
 
+import { getCalloutTextColor } from "@excalidraw/element/calloutAppearance";
+
 import type {
   ExcalidrawElement,
   ExcalidrawTextElementWithContainer,
@@ -727,10 +729,11 @@ const renderElementToSvg = (
           text.setAttribute("font-size", `${element.fontSize}px`);
           text.setAttribute(
             "fill",
-            applyDarkModeFilter(
-              element.strokeColor,
-              renderConfig.theme === THEME.DARK,
-            ),
+            getCalloutTextColor(element, elementsMap) ??
+              applyDarkModeFilter(
+                element.strokeColor,
+                renderConfig.theme === THEME.DARK,
+              ),
           );
           text.setAttribute("text-anchor", textAnchor);
           text.setAttribute("style", "white-space: pre;");

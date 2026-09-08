@@ -221,6 +221,7 @@ export type StaticCanvasAppState = Readonly<
 
 export type InteractiveCanvasAppState = Readonly<
   _CommonCanvasAppState & {
+    calloutSelectionMode: AppState["calloutSelectionMode"];
     activeTool: AppState["activeTool"];
     // renderInteractiveScene
     activeEmbeddable: AppState["activeEmbeddable"];
@@ -474,6 +475,7 @@ export interface AppState {
 
   lastPointerDownWith: PointerType;
   selectedElementIds: Readonly<{ [id: string]: true }>;
+  calloutSelectionMode: "box" | "whole";
   hoveredElementIds: Readonly<{ [id: string]: true }>;
   previousSelectedElementIds: { [id: string]: true };
   selectedElementsAreBeingDragged: boolean;
@@ -1205,6 +1207,8 @@ export type PointerDownState = Readonly<{
     allHitElements: NonDeleted<ExcalidrawElement>[];
     // This is determined on the initial pointer down event
     wasAddedToSelection: boolean;
+    /** A click selects the box, but a drag keeps an explicit whole selection. */
+    selectCalloutBoxOnPointerUp?: boolean;
     // Whether selected element(s) were duplicated, might change during the
     // pointer interaction
     hasBeenDuplicated: boolean;

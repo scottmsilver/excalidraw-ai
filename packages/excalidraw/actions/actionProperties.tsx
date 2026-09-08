@@ -358,6 +358,18 @@ export const actionChangeStrokeColor = register<
             return hasStrokeColor(el.type)
               ? newElementWith(el, {
                   strokeColor: value.currentItemStrokeColor,
+                  ...(isCalloutElement(el) && el.calloutAutoStyle
+                    ? {
+                        calloutAutoStyle: {
+                          ...el.calloutAutoStyle,
+                          foreground: false,
+                        },
+                        calloutManualColors: {
+                          ...el.calloutManualColors,
+                          foreground: undefined,
+                        },
+                      }
+                    : {}),
                 })
               : el;
           },
@@ -446,6 +458,15 @@ export const actionChangeBackgroundColor = register<
       nextElements = changeProperty(elements, appState, (el) =>
         newElementWith(el, {
           backgroundColor: value.currentItemBackgroundColor,
+          ...(isCalloutElement(el) && el.calloutAutoStyle
+            ? {
+                calloutAutoStyle: { ...el.calloutAutoStyle, background: false },
+                calloutManualColors: {
+                  ...el.calloutManualColors,
+                  background: undefined,
+                },
+              }
+            : {}),
         }),
       );
     }

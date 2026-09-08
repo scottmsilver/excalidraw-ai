@@ -591,6 +591,8 @@ export const newCalloutElement = (
     tailTip?: ExcalidrawCalloutElement["tailTip"];
     tailCurve?: ExcalidrawCalloutElement["tailCurve"];
     tailArrowhead?: ExcalidrawCalloutElement["tailArrowhead"];
+    calloutAutoStyle?: ExcalidrawCalloutElement["calloutAutoStyle"];
+    calloutBackgroundOpacity?: number;
   } & ElementConstructorOpts,
 ): NonDeleted<ExcalidrawCalloutElement> => {
   // Default tail attachment at bottom-center (0.625 = 62.5% around perimeter)
@@ -609,6 +611,11 @@ export const newCalloutElement = (
     // Pass the calculated width/height to ensure consistency
     ..._newElementBase<ExcalidrawCalloutElement>("callout", {
       ...opts,
+      opacity:
+        !opts.calloutAutoStyle ||
+        Object.values(opts.calloutAutoStyle).some(Boolean)
+          ? 100
+          : opts.opacity,
       width,
       height,
     }),
@@ -616,5 +623,11 @@ export const newCalloutElement = (
     tailTip,
     tailCurve,
     tailArrowhead,
+    calloutAutoStyle: opts.calloutAutoStyle ?? {
+      foreground: true,
+      background: true,
+      opacity: true,
+    },
+    calloutBackgroundOpacity: opts.calloutBackgroundOpacity ?? 100,
   };
 };

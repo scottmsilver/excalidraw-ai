@@ -8,6 +8,7 @@ import { isArrowElement } from "@excalidraw/element";
 
 import type {
   ExcalidrawElement,
+  ExcalidrawCalloutElement,
   NonDeletedElementsMap,
   NonDeletedSceneElementsMap,
 } from "@excalidraw/element/types";
@@ -22,6 +23,8 @@ import { getFormValue } from "../actions/actionProperties";
 import { useTextEditorFocus } from "../hooks/useTextEditorFocus";
 
 import { actionToggleViewMode } from "../actions/actionToggleViewMode";
+
+import { CalloutStyleControls } from "./CalloutStyleControls";
 
 import "./Actions.scss";
 
@@ -46,6 +49,23 @@ import { getShapeActionPredicates } from "./shapeActionPredicates";
 import type { ShapeActionPredicates } from "./shapeActionPredicates";
 import type { AppClassProperties, UIAppState, AppState } from "../types";
 import type { ActionManager } from "../actions/manager";
+
+const singleCallout = (
+  elements: readonly ExcalidrawElement[],
+): ExcalidrawCalloutElement | undefined => {
+  const callout = elements.find(
+    (element): element is ExcalidrawCalloutElement =>
+      element.type === "callout",
+  );
+  return callout &&
+    elements.every(
+      (element) =>
+        element.id === callout.id ||
+        (element.type === "text" && element.containerId === callout.id),
+    )
+    ? callout
+    : undefined;
+};
 
 // re-exported for consumers outside the styles panel (e.g. CommandPalette)
 export {
@@ -166,6 +186,12 @@ export const SelectedShapeActions = ({
 
   return (
     <div className="selected-shape-actions">
+      {singleCallout(targetElements) && (
+        <CalloutStyleControls
+          element={singleCallout(targetElements)!}
+          app={app}
+        />
+      )}
       <div>{predicates.strokeColor && renderAction("changeStrokeColor")}</div>
       {predicates.backgroundColor && (
         <div>{renderAction("changeBackgroundColor")}</div>
@@ -229,12 +255,16 @@ const CombinedShapeProperties = ({
   setAppState,
   predicates,
   container,
+  callout,
+  app,
 }: {
   appState: UIAppState;
   renderAction: ActionManager["renderAction"];
   setAppState: React.Component<any, AppState>["setState"];
   predicates: ShapeActionPredicates;
   container: HTMLDivElement | null;
+  callout?: ExcalidrawElement;
+  app: AppClassProperties;
 }) => {
   const shouldShowCombinedProperties =
     predicates.hasSelection ||
@@ -288,6 +318,9 @@ const CombinedShapeProperties = ({
             onClose={() => {}}
           >
             <div className="selected-shape-actions">
+              {callout?.type === "callout" && (
+                <CalloutStyleControls element={callout} app={app} />
+              )}
               {predicates.fill && renderAction("changeFillStyle")}
               {predicates.strokeWidth && renderAction("changeStrokeWidth")}
               {
@@ -659,6 +692,8 @@ export const CompactShapeActions = ({
       )}
 
       <CombinedShapeProperties
+        app={app}
+        callout={singleCallout(targetElements)}
         appState={appState}
         renderAction={renderAction}
         setAppState={setAppState}
@@ -809,6 +844,8 @@ export const MobileShapeActions = ({
           </div>
         )}
         <CombinedShapeProperties
+          app={app}
+          callout={singleCallout(targetElements)}
           appState={appState}
           renderAction={renderAction}
           setAppState={setAppState}

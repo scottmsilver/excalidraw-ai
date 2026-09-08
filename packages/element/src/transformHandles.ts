@@ -14,8 +14,10 @@ import type {
 import type { Bounds } from "@excalidraw/common";
 
 import { getElementAbsoluteCoords } from "./bounds";
+import { getCalloutSelectionFrame } from "./calloutTransform";
 import {
   isElbowArrow,
+  isCalloutElement,
   isFrameLikeElement,
   isImageElement,
   isLinearElement,
@@ -275,7 +277,14 @@ export const getTransformHandles = (
   elementsMap: ElementsMap,
   pointerType: PointerType = "mouse",
   omitSides: { [T in TransformHandleType]?: boolean } = DEFAULT_OMIT_SIDES,
+  calloutSelectionMode: "box" | "whole" = "box",
 ): TransformHandles => {
+  if (
+    isCalloutElement(element) &&
+    (calloutSelectionMode === "whole" || element.groupIds.length)
+  ) {
+    element = getCalloutSelectionFrame(element);
+  }
   // so that when locked element is selected (especially when you toggle lock
   // via keyboard) the locked element is visually distinct, indicating
   // you can't move/resize

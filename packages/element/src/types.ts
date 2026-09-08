@@ -100,6 +100,21 @@ export type ExcalidrawEllipseElement = _ExcalidrawElementBase & {
 export type ExcalidrawCalloutElement = _ExcalidrawElementBase &
   Readonly<{
     type: "callout";
+    // Absent on legacy documents, whose explicit appearance stays unchanged.
+    calloutAutoStyle?: Readonly<{
+      foreground: boolean;
+      background: boolean;
+      opacity: boolean;
+    }>;
+    // Body fill alpha only; the inherited opacity still affects the whole element.
+    calloutBackgroundOpacity?: number;
+    // Explicit displayed colors captured when an Auto field is locked. Normal
+    // palette edits clear the matching value and retain standard theme semantics.
+    calloutManualColors?: Readonly<{
+      foreground?: string;
+      background?: string;
+    }>;
+    calloutResolvedStyle?: import("./calloutContrast").CalloutContrastResult;
     // Tail attachment point as ratio around perimeter (0-1), going clockwise from top-left
     tailAttachment: number;
     // Tail tip position relative to element origin

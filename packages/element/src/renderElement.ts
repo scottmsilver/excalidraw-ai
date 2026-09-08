@@ -43,6 +43,7 @@ import type {
 } from "@excalidraw/excalidraw/scene/types";
 
 import { getElementAbsoluteCoords, getElementBounds } from "./bounds";
+import { getCalloutTextColor } from "./calloutAppearance";
 import { getUncroppedImageElement } from "./cropElement";
 import { LinearElementEditor } from "./linearElementEditor";
 import {
@@ -283,7 +284,7 @@ const generateElementCanvas = (
 
   const rc = rough.canvas(canvas);
 
-  drawElementOnCanvas(element, rc, context, renderConfig);
+  drawElementOnCanvas(element, rc, context, renderConfig, elementsMap);
 
   context.restore();
 
@@ -352,6 +353,7 @@ const drawElementOnCanvas = (
   rc: RoughCanvas,
   context: CanvasRenderingContext2D,
   renderConfig: StaticCanvasRenderConfig,
+  elementsMap: ElementsMap,
 ) => {
   switch (element.type) {
     case "rectangle":
@@ -520,10 +522,12 @@ const drawElementOnCanvas = (
         context.canvas.setAttribute("dir", rtl ? "rtl" : "ltr");
         context.save();
         context.font = getFontString(element);
-        context.fillStyle = applyDarkModeFilter(
-          element.strokeColor,
-          renderConfig.theme === THEME.DARK,
-        );
+        context.fillStyle =
+          getCalloutTextColor(element, elementsMap) ??
+          applyDarkModeFilter(
+            element.strokeColor,
+            renderConfig.theme === THEME.DARK,
+          );
         context.textAlign = element.textAlign as CanvasTextAlign;
 
         // Canvas does not support multiline text by default
@@ -848,7 +852,7 @@ export const renderElement = (
         context.translate(cx, cy);
         context.rotate(element.angle);
         context.translate(-shiftX, -shiftY);
-        drawElementOnCanvas(element, rc, context, renderConfig);
+        drawElementOnCanvas(element, rc, context, renderConfig, elementsMap);
         context.restore();
       } else {
         const elementWithCanvas = generateElementWithCanvas(
@@ -947,7 +951,7 @@ export const renderElement = (
           context.clip("evenodd");
           context.rotate(element.angle);
           context.translate(-shiftX, -shiftY);
-          drawElementOnCanvas(element, rc, context, renderConfig);
+          drawElementOnCanvas(element, rc, context, renderConfig, elementsMap);
           context.restore();
         } else {
           context.rotate(element.angle);
@@ -958,7 +962,7 @@ export const renderElement = (
           }
 
           context.translate(-shiftX, -shiftY);
-          drawElementOnCanvas(element, rc, context, renderConfig);
+          drawElementOnCanvas(element, rc, context, renderConfig, elementsMap);
         }
 
         context.restore();
