@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { Children, useEffect, useId, useRef, useState } from "react";
+import { Popover } from "radix-ui";
 
 import { CaptureUpdateAction, newElementWith } from "@excalidraw/element";
 import {
@@ -19,7 +20,9 @@ import type {
 } from "@excalidraw/element/autoContrastUpdates";
 import type { ExcalidrawElement } from "@excalidraw/element/types";
 
-import { chevronDownIcon } from "./icons";
+import { adjustmentsIcon } from "./icons";
+import { Switch } from "./Switch";
+import { useEditorInterface, useExcalidrawContainer } from "./App";
 
 import "./AutoContrastControls.scss";
 
@@ -41,6 +44,9 @@ export const AutoContrastControls = ({
   );
   const advancedId = useId();
   const advancedTrigger = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
+  const { container } = useExcalidrawContainer();
+  const editorInterface = useEditorInterface();
   const selectionKey = elements
     .map((element) => element.id)
     .sort()
@@ -109,31 +115,21 @@ export const AutoContrastControls = ({
             ? "Fill opacity"
             : label}
         </span>
-        <div
-          className="auto-contrast__segments"
-          role="group"
-          aria-label={`${label} mode`}
-        >
-          {[true, false].map((automatic) => (
-            <button
-              key={String(automatic)}
-              type="button"
-              aria-label={`${
-                automatic ? "Auto" : "Manual"
-              } ${label.toLowerCase()}`}
-              aria-pressed={automatic ? every : !some}
-              onClick={() =>
-                update(
-                  (element) =>
-                    setAutoContrastFields(element, { [field]: automatic }),
-                  applicable,
-                )
-              }
-            >
-              {automatic ? "Auto" : "Manual"}
-            </button>
-          ))}
-        </div>
+        <Switch
+          name={`${advancedId}-auto-${field}`}
+          role="switch"
+          label={`Auto ${label.toLowerCase()}`}
+          checked={every}
+          mixed={some && !every}
+          description={some && !every ? `${advancedId}-mixed` : undefined}
+          onChange={(automatic) =>
+            update(
+              (element) =>
+                setAutoContrastFields(element, { [field]: automatic }),
+              applicable,
+            )
+          }
+        />
       </div>
     );
   };
@@ -167,7 +163,6 @@ export const AutoContrastControls = ({
         className="auto-contrast__preview"
         aria-label={`Current ${label.toLowerCase()} color`}
       >
-        <span>{label}</span>
         <span
           className="auto-contrast__value"
           title={mixed ? "Mixed colors" : color}
@@ -182,36 +177,45 @@ export const AutoContrastControls = ({
               }}
             />
           </span>
-          {mixed
-            ? "Mixed"
-            : color === "transparent" ||
-              (field === "background" && opacity === 0)
-            ? "None"
-            : color === "#000000"
-            ? "Black"
-            : color === "#ffffff"
-            ? "White"
-            : color}
         </span>
       </div>
     );
   };
   return (
-    <section className="auto-contrast" role="group" aria-label="Colors">
-      <div className="auto-contrast__header">
-        <span className="auto-contrast__title">Colors</span>
-        <div className="auto-contrast__toggle-group" data-active={any}>
-          <button
-            type="button"
-            aria-label="Auto contrast"
-            aria-pressed={any && !all ? "mixed" : all}
+    <Popover.Root
+      open={expanded}
+      onOpenChange={(open) => setExpandedSelection(open ? selectionKey : null)}
+    >
+      <section className="auto-contrast" role="group" aria-label="Colors">
+        <div className="auto-contrast__header">
+          <span className="auto-contrast__title">Colors</span>
+          <Popover.Trigger asChild>
+            <button
+              type="button"
+              ref={advancedTrigger}
+              className="auto-contrast__settings"
+              aria-label="Advanced color settings"
+              title="Advanced color settings"
+            >
+              {adjustmentsIcon}
+            </button>
+          </Popover.Trigger>
+        </div>
+        <div className="auto-contrast__mode">
+          <label htmlFor={`${advancedId}-master`}>Auto contrast</label>
+          <Switch
+            name={`${advancedId}-master`}
+            role="switch"
+            label="Auto contrast"
+            checked={all}
+            mixed={any && !all}
+            description={any && !all ? `${advancedId}-mixed` : undefined}
             title={
               any && !all
                 ? "Some settings are manual. Enable all automatic settings."
                 : "Automatically adapt colors to the artwork underneath"
             }
-            onClick={() => {
-              const value = !all;
+            onChange={(value) => {
               update((element) =>
                 autoContrastChanges(element, {
                   modes: {
@@ -225,102 +229,121 @@ export const AutoContrastControls = ({
                 }),
               );
             }}
-          >
-            Auto contrast
-          </button>
-          <button
-            type="button"
-            ref={advancedTrigger}
-            className="auto-contrast__chevron"
-            aria-label="Advanced color settings"
-            title="Advanced color settings"
-            aria-expanded={expanded}
-            aria-controls={advancedId}
-            onClick={() => setExpandedSelection(expanded ? null : selectionKey)}
-          >
-            {chevronDownIcon}
-          </button>
+          />
         </div>
-      </div>
-      {all && !hasUnsupportedTargets && (
-        <div className="auto-contrast__previews">
-          {preview("foreground", "Stroke")}
-          {!!fillOwners.length &&
-            preview("background", "Background", fillOwners)}
+        <span id={`${advancedId}-mixed`} className="auto-contrast__sr-only">
+          Some settings are manual. Turn on to make all applicable settings
+          automatic.
+        </span>
+        <div className="auto-contrast__manual">
+          {Children.toArray(children).map((child, index) => {
+            const field = index === 0 ? "foreground" : "background";
+            const applicable = index === 0 ? owners : fillOwners;
+            const automatic =
+              !hasUnsupportedTargets &&
+              applicable.length > 0 &&
+              applicable.every((element) => mode(element, field));
+            return (
+              <div
+                className="auto-contrast__color-row"
+                key={field}
+                data-automatic={automatic}
+              >
+                <fieldset disabled={automatic}>{child}</fieldset>
+                {automatic &&
+                  preview(
+                    field,
+                    index === 0 ? "Stroke" : "Background",
+                    applicable,
+                  )}
+              </div>
+            );
+          })}
         </div>
+      </section>
+      {expanded && (
+        <Popover.Portal container={container}>
+          <Popover.Content
+            className="auto-contrast auto-contrast__advanced"
+            aria-label="Automatic color settings"
+            side={editorInterface.formFactor === "phone" ? "bottom" : "right"}
+            align="start"
+            sideOffset={12}
+            collisionPadding={12}
+            collisionBoundary={container ?? undefined}
+            onEscapeKeyDown={(event) => {
+              event.stopPropagation();
+              restoreFocus.current = true;
+            }}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              if (restoreFocus.current) {
+                restoreFocus.current = false;
+                advancedTrigger.current?.focus();
+              }
+            }}
+          >
+            <h3>Automatic settings</h3>
+            {any && !all && <small>Some settings are manual</small>}
+            {fieldControl("foreground", "Foreground")}
+            {!!fillOwners.length && (
+              <>
+                {fieldControl("background", "Background", fillOwners)}
+                {fieldControl("opacity", "Background opacity", fillOwners)}
+                <div className="auto-contrast__opacity-control">
+                  <span className="auto-contrast__opacity-label">
+                    <label htmlFor={`${advancedId}-opacity`}>
+                      Fill opacity
+                    </label>
+                    <output>
+                      {mixedOpacity ? "Mixed" : `${Math.round(opacity)}%`}
+                    </output>
+                  </span>
+                  <input
+                    id={`${advancedId}-opacity`}
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={opacity}
+                    aria-label={
+                      owners.length === 1 && owners[0].type === "callout"
+                        ? "Callout background opacity"
+                        : "Fill opacity"
+                    }
+                    onChange={(event) =>
+                      update(
+                        (element) => ({
+                          ...(getAutoContrastModes(element)
+                            ? setAutoContrastFields(element, { opacity: false })
+                            : {}),
+                          ...autoContrastChanges(element, {
+                            fillOpacity: Number(event.target.value),
+                          }),
+                        }),
+                        fillOwners,
+                      )
+                    }
+                  />
+                </div>
+              </>
+            )}
+            {owners.some(
+              (element) => getAutoContrastResolved(element)?.fallback,
+            ) && (
+              <p role="status">
+                Artwork unavailable; using a contrast fallback.
+              </p>
+            )}
+            {owners.some(
+              (element) => getAutoContrastResolved(element)?.lowContrast,
+            ) && (
+              <p role="status">
+                Low contrast: a single color may not be readable everywhere.
+              </p>
+            )}
+          </Popover.Content>
+        </Popover.Portal>
       )}
-      <div
-        className="auto-contrast__manual"
-        hidden={all && !hasUnsupportedTargets}
-      >
-        {children}
-      </div>
-      <div
-        id={advancedId}
-        className="auto-contrast__advanced"
-        hidden={!expanded}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.stopPropagation();
-            setExpandedSelection(null);
-            advancedTrigger.current?.focus();
-          }
-        }}
-      >
-        {any && !all && <small>Some settings are manual</small>}
-        {fieldControl("foreground", "Foreground")}
-        {!!fillOwners.length && (
-          <>
-            {fieldControl("background", "Background", fillOwners)}
-            {fieldControl("opacity", "Background opacity", fillOwners)}
-            <div className="auto-contrast__opacity-control">
-              <span className="auto-contrast__opacity-label">
-                <label htmlFor={`${advancedId}-opacity`}>Fill opacity</label>
-                <output>
-                  {mixedOpacity ? "Mixed" : `${Math.round(opacity)}%`}
-                </output>
-              </span>
-              <input
-                id={`${advancedId}-opacity`}
-                type="range"
-                min={0}
-                max={100}
-                value={opacity}
-                aria-label={
-                  owners.length === 1 && owners[0].type === "callout"
-                    ? "Callout background opacity"
-                    : "Fill opacity"
-                }
-                onChange={(event) =>
-                  update(
-                    (element) => ({
-                      ...(getAutoContrastModes(element)
-                        ? setAutoContrastFields(element, { opacity: false })
-                        : {}),
-                      ...autoContrastChanges(element, {
-                        fillOpacity: Number(event.target.value),
-                      }),
-                    }),
-                    fillOwners,
-                  )
-                }
-              />
-            </div>
-          </>
-        )}
-        {owners.some(
-          (element) => getAutoContrastResolved(element)?.fallback,
-        ) && (
-          <p role="status">Artwork unavailable; using a contrast fallback.</p>
-        )}
-        {owners.some(
-          (element) => getAutoContrastResolved(element)?.lowContrast,
-        ) && (
-          <p role="status">
-            Low contrast: a single color may not be readable everywhere.
-          </p>
-        )}
-      </div>
-    </section>
+    </Popover.Root>
   );
 };

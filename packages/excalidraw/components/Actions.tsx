@@ -685,10 +685,16 @@ const CompactColors = ({
             <div className="selected-shape-actions">
               <AutoContrastControls elements={elements} app={app}>
                 {predicates.strokeColor && (
-                  <div>{renderAction("changeStrokeColor")}</div>
+                  <div>
+                    <h3 aria-hidden="true">{t("labels.stroke")}</h3>
+                    {renderAction("changeStrokeColor")}
+                  </div>
                 )}
                 {predicates.backgroundColor && (
-                  <div>{renderAction("changeBackgroundColor")}</div>
+                  <div>
+                    <h3 aria-hidden="true">{t("labels.background")}</h3>
+                    {renderAction("changeBackgroundColor")}
+                  </div>
                 )}
               </AutoContrastControls>
             </div>
