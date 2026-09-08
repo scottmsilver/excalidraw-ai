@@ -9175,6 +9175,7 @@ class App extends React.Component<AppProps, AppState> {
             pointFrom<LocalPoint>(localX, localY),
             calloutElement.width,
             calloutElement.height,
+            calloutElement.roundness,
           );
 
           this.scene.mutateElement(calloutElement, {

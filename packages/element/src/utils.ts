@@ -463,7 +463,10 @@ export const isPathALoop = (
   return false;
 };
 
-export const getCornerRadius = (x: number, element: ExcalidrawElement) => {
+export const getCornerRadius = (
+  x: number,
+  element: Pick<ExcalidrawElement, "roundness">,
+) => {
   if (
     element.roundness?.type === ROUNDNESS.PROPORTIONAL_RADIUS ||
     element.roundness?.type === ROUNDNESS.LEGACY

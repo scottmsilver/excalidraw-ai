@@ -3,6 +3,7 @@ import { pointFrom, pointRotateRads } from "@excalidraw/math";
 import type { LocalPoint, Radians } from "@excalidraw/math";
 
 import { getArrowheadSize, getArrowheadAngle } from "./bounds";
+import { getCornerRadius } from "./utils";
 
 import type { ExcalidrawCalloutElement } from "./types";
 /**
@@ -26,6 +27,76 @@ interface CalloutTailGeometry {
   tipPoint: LocalPoint;
 }
 
+type Roundness = ExcalidrawCalloutElement["roundness"];
+
+// Keep the saved rectangular-perimeter ratio, but replace each corner's
+// final/initial radius-length stretches with the renderer's quadratic curve.
+const roundedCorners = (
+  width: number,
+  height: number,
+  roundness?: Roundness,
+) => {
+  const r =
+    width > 0 && height > 0
+      ? getCornerRadius(Math.min(width, height), {
+          roundness: roundness ?? null,
+        })
+      : 0;
+  return {
+    r,
+    corners: [
+      { s: 0, start: [0, r], control: [0, 0], end: [r, 0] },
+      { s: width, start: [width - r, 0], control: [width, 0], end: [width, r] },
+      {
+        s: width + height,
+        start: [width, height - r],
+        control: [width, height],
+        end: [width - r, height],
+      },
+      {
+        s: 2 * width + height,
+        start: [r, height],
+        control: [0, height],
+        end: [0, height - r],
+      },
+    ],
+  };
+};
+
+type Corner = ReturnType<typeof roundedCorners>["corners"][number];
+const cornerPoint = (corner: Corner, t: number): LocalPoint =>
+  pointFrom<LocalPoint>(
+    (1 - t) ** 2 * corner.start[0] +
+      2 * (1 - t) * t * corner.control[0] +
+      t * t * corner.end[0],
+    (1 - t) ** 2 * corner.start[1] +
+      2 * (1 - t) * t * corner.control[1] +
+      t * t * corner.end[1],
+  );
+
+const cornerAtRatio = (
+  ratio: number,
+  width: number,
+  height: number,
+  roundness?: Roundness,
+) => {
+  const { r, corners } = roundedCorners(width, height, roundness);
+  if (!r) {
+    return null;
+  }
+  const perimeter = 2 * (width + height);
+  const s = (((ratio % 1) + 1) % 1) * perimeter;
+  for (const corner of corners) {
+    const delta =
+      ((((s - corner.s + perimeter / 2) % perimeter) + perimeter) % perimeter) -
+      perimeter / 2;
+    if (Math.abs(delta) <= r) {
+      return { corner, t: (delta + r) / (2 * r) };
+    }
+  }
+  return null;
+};
+
 /**
  * Converts a perimeter ratio (0-1) to an x,y point on the rectangle perimeter.
  * Accounts for rounded corners if roundness is specified.
@@ -34,8 +105,12 @@ export const perimeterRatioToPoint = (
   ratio: number,
   width: number,
   height: number,
-  _roundness?: ExcalidrawCalloutElement["roundness"],
+  roundness?: Roundness,
 ): LocalPoint => {
+  const curved = cornerAtRatio(ratio, width, height, roundness);
+  if (curved) {
+    return cornerPoint(curved.corner, curved.t);
+  }
   // Handle zero/invalid dimensions gracefully
   if (width <= 0 && height <= 0) {
     return pointFrom<LocalPoint>(0, 0);
@@ -102,7 +177,19 @@ export const getPerimeterNormal = (
   ratio: number,
   width: number,
   height: number,
+  roundness?: Roundness,
 ): LocalPoint => {
+  const curved = cornerAtRatio(ratio, width, height, roundness);
+  if (curved) {
+    const {
+      corner: { start, control, end },
+      t,
+    } = curved;
+    const dx = (1 - t) * (control[0] - start[0]) + t * (end[0] - control[0]);
+    const dy = (1 - t) * (control[1] - start[1]) + t * (end[1] - control[1]);
+    const length = Math.hypot(dx, dy);
+    return pointFrom<LocalPoint>(dy / length, -dx / length);
+  }
   // Handle zero/invalid dimensions gracefully
   if (width <= 0 && height <= 0) {
     return pointFrom<LocalPoint>(0, 1); // Default to pointing down
@@ -154,7 +241,51 @@ export const pointToPerimeterRatio = (
   point: LocalPoint,
   width: number,
   height: number,
+  roundness?: Roundness,
 ): number => {
+  const { r, corners } = roundedCorners(width, height, roundness);
+  if (r) {
+    const perimeter = 2 * (width + height);
+    let bestRatio = pointToPerimeterRatio(point, width, height);
+    const distance = (p: LocalPoint) =>
+      (p[0] - point[0]) ** 2 + (p[1] - point[1]) ** 2;
+    let bestDistance = distance(
+      perimeterRatioToPoint(bestRatio, width, height, roundness),
+    );
+    // Sample then refine each quadratic. This also handles points inside the
+    // shape, where squared distance to a curve need not be globally unimodal.
+    for (const corner of corners) {
+      let sample = 0;
+      for (let i = 1; i <= 32; i++) {
+        if (
+          distance(cornerPoint(corner, i / 32)) <
+          distance(cornerPoint(corner, sample / 32))
+        ) {
+          sample = i;
+        }
+      }
+      let lo = Math.max(0, (sample - 1) / 32);
+      let hi = Math.min(1, (sample + 1) / 32);
+      for (let i = 0; i < 40; i++) {
+        const a = lo + (hi - lo) / 3;
+        const b = hi - (hi - lo) / 3;
+        if (
+          distance(cornerPoint(corner, a)) < distance(cornerPoint(corner, b))
+        ) {
+          hi = b;
+        } else {
+          lo = a;
+        }
+      }
+      const t = (lo + hi) / 2;
+      const d = distance(cornerPoint(corner, t));
+      if (d < bestDistance) {
+        bestDistance = d;
+        bestRatio = ((corner.s - r + 2 * r * t) / perimeter + 1) % 1;
+      }
+    }
+    return bestRatio;
+  }
   const [px, py] = point;
 
   // Clamp point to rectangle bounds
@@ -226,8 +357,18 @@ export const getCalloutTailPoints = (
 ): CalloutTailGeometry => {
   const { width, height, tailAttachment, tailTip, tailCurve } = element;
 
-  const attachPoint = perimeterRatioToPoint(tailAttachment, width, height);
-  const normal = getPerimeterNormal(tailAttachment, width, height);
+  const attachPoint = perimeterRatioToPoint(
+    tailAttachment,
+    width,
+    height,
+    element.roundness,
+  );
+  const normal = getPerimeterNormal(
+    tailAttachment,
+    width,
+    height,
+    element.roundness,
+  );
   const controlPoint = calculateTailControlPoint(
     attachPoint,
     tailTip,
