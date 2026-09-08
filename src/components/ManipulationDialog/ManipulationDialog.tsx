@@ -295,7 +295,8 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
   exportBounds,
 }) => {
   // Get context setters for syncing progress state to ThinkingOverlay
-  const { setIsProcessing, setProgress } = useAIManipulation();
+  const { setIsProcessing, setProgress, beginEditRequest } =
+    useAIManipulation();
 
   const [state, setState] = useState<ManipulationDialogState>(INITIAL_STATE);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -421,7 +422,9 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
   // Reference points are optional - user can provide context via drawn annotations or just text
   // cleanImageBlob is required (the image to edit), annotatedImageBlob is optional (for AI guidance)
   const canSubmit =
-    !state.isLoading && state.command.trim().length > 0 && cleanImageBlob !== null;
+    !state.isLoading &&
+    state.command.trim().length > 0 &&
+    cleanImageBlob !== null;
 
   /**
    * Handle progress events from SSE stream
@@ -491,6 +494,7 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
     if (!canSubmit || !cleanImageBlob) {
       return;
     }
+    const isCurrentRequest = beginEditRequest();
 
     // Reset accumulated text and images for new operation
     accumulatedThinkingRef.current = "";
@@ -529,8 +533,16 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
         referencePoints: transformedReferencePoints,
         shapes,
         command: state.command.trim(),
-        onProgress: handleProgress,
+        onProgress: (event) => {
+          if (isCurrentRequest()) {
+            handleProgress(event);
+          }
+        },
       });
+
+      if (!isCurrentRequest()) {
+        return;
+      }
 
       // End logging operation
       aiLogService.endOperation("complete", "Edit complete!");
@@ -538,6 +550,9 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
       // Don't call onResult here - the review UI will handle accept/reject
       // The result images are collected via onProgress → addIterationImage
     } catch (error) {
+      if (!isCurrentRequest()) {
+        return;
+      }
       const errorMessage =
         error instanceof Error ? error.message : "An unknown error occurred";
 
@@ -551,7 +566,9 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
       console.error("AI Edit failed:", errorMessage);
     } finally {
       // Clear processing state
-      setIsProcessing(false);
+      if (isCurrentRequest()) {
+        setIsProcessing(false);
+      }
     }
   }, [
     canSubmit,
@@ -564,6 +581,7 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
     handleProgress,
     onClose,
     setIsProcessing,
+    beginEditRequest,
   ]);
 
   /**

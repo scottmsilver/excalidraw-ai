@@ -94,6 +94,25 @@ vi.mock(
   },
 );
 
+// Mock heicConverter module - heic-to uses Web Workers not available in Node.js
+vi.mock("./packages/excalidraw/data/heicConverter", () => ({
+  isHeicFile: vi.fn().mockReturnValue(false),
+  isHeicFileAsync: vi.fn().mockResolvedValue(false),
+  convertHeicToJpeg: vi.fn().mockResolvedValue(new File([], "test.jpg")),
+  createLoadingPlaceholderDataURL: vi.fn().mockReturnValue("data:image/svg+xml,"),
+  createLoadingPlaceholderFile: vi.fn().mockReturnValue(new File([], "loading.svg")),
+}));
+
+// Mock pdfUtils module - pdfjs-dist uses Web Workers not available in Node.js
+vi.mock("./packages/excalidraw/data/pdfUtils", () => ({
+  isPdfFile: vi.fn().mockReturnValue(false),
+  loadPDFDocument: vi.fn().mockResolvedValue({}),
+  getPDFInfo: vi.fn().mockResolvedValue({ numPages: 1, pages: [] }),
+  pdfPageToDataURL: vi.fn().mockResolvedValue("data:image/png,"),
+  pdfPageToFile: vi.fn().mockResolvedValue(new File([], "test.png")),
+  renderPDFPage: vi.fn().mockResolvedValue(document.createElement("canvas")),
+}));
+
 // ReactDOM is located inside index.tsx file
 // as a result, we need a place for it to render into
 const element = document.createElement("div");

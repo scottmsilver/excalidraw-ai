@@ -66,7 +66,7 @@ export const SHAPE_TYPES = [
 ] as const;
 
 /** Shape types supported for AI context */
-export type ShapeType = (typeof SHAPE_TYPES)[number];
+export type ShapeType = typeof SHAPE_TYPES[number];
 
 /**
  * Metadata for a user-drawn shape/annotation on the canvas.

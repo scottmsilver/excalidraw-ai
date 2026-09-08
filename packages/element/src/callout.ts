@@ -5,7 +5,6 @@ import type { LocalPoint, Radians } from "@excalidraw/math";
 import { getArrowheadSize, getArrowheadAngle } from "./bounds";
 
 import type { ExcalidrawCalloutElement } from "./types";
-
 /**
  * Perimeter ratio system for callout tail attachment.
  * The ratio (0-1) maps to the rectangle perimeter going clockwise from top-left:

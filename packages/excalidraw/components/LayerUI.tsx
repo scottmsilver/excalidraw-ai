@@ -373,6 +373,7 @@ const LayerUI = ({
                               UIOptions={UIOptions}
                               app={app}
                             />
+                            <tunnels.ExtraToolbarTunnel.Out />
                           </Stack.Row>
                         </Island>
                         {isCollaborating && (

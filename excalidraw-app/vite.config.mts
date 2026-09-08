@@ -147,6 +147,8 @@ export default defineConfig(({ mode }) => {
         },
 
         workbox: {
+          // Increase limit to accommodate larger bundles (heic-to, pdfjs-dist)
+          maximumFileSizeToCacheInBytes: 15 * 1024 * 1024, // 15 MB
           // don't precache fonts, locales and separate chunks
           globIgnores: [
             "fonts.css",

@@ -11,6 +11,8 @@ ARG VITE_API_BASE_URL
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 # Disable ESLint during build (lint is already done in CI)
 ENV VITE_APP_ENABLE_ESLINT=false
+# Increase Node memory limit for build (heic-to and pdfjs-dist add to bundle size)
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 # Copy package files from monorepo root (yarn 1.x classic)
 COPY package.json yarn.lock ./
