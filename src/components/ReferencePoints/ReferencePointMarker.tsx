@@ -23,20 +23,13 @@ const MARKER_STYLES = {
 } as const;
 
 /**
- * Get colors for a marker based on its index
- */
-function getMarkerColors(index: number) {
-  return MARKER_COLORS[index % MARKER_COLORS.length];
-}
-
-/**
  * ReferencePointMarker Component
  *
  * Renders a visual marker for a reference point on the canvas.
- * Displays as a colored circle with the label (A, B, C, ... Z, AA, AB, etc.) inside.
+ * Displays as an outlined circle with the label (A, B, C, ... Z, AA, AB, etc.) inside.
  *
  * Features:
- * - Color-coded by index (cycles through palette)
+ * - Monochrome styling, identified by its letter
  * - Clickable with visual feedback
  * - Optional remove button on hover
  * - Scales with canvas zoom
@@ -48,7 +41,7 @@ export const ReferencePointMarker: React.FC<ReferencePointMarkerProps> = ({
   onClick,
   onRemove,
 }) => {
-  const colors = getMarkerColors(point.index);
+  const colors = MARKER_COLORS;
   const scaledSize = MARKER_STYLES.size / scale;
   const scaledFontSize = MARKER_STYLES.fontSize / scale;
   const scaledBorderWidth = MARKER_STYLES.borderWidth / scale;
