@@ -7,6 +7,7 @@ import { useTunnels } from "../context/tunnels";
 import { t } from "../i18n";
 
 import { useEditorInterface, useStylesPanelMode } from "./App";
+import { AIAnnotationHint, AIAnnotationTools } from "./AIAnnotationTools";
 import { HintViewer } from "./HintViewer";
 import { Island } from "./Island";
 import { LockButton } from "./LockButton";
@@ -225,6 +226,7 @@ export const Toolbar = ({
 
   const activeTool = appState.activeTool;
   const toolProps = { app, activeTool };
+  const isAIEdit = app.props.editingMode === "ai";
 
   return (
     <Island
@@ -232,80 +234,92 @@ export const Toolbar = ({
       className={clsx("App-toolbar", {
         "zen-mode": appState.zenModeEnabled,
         "App-toolbar--compact": isCompactStylesPanel,
+        "App-toolbar--ai": isAIEdit,
       })}
       data-viewport-ui="top"
     >
-      <HintViewer
-        appState={appState}
-        isMobile={editorInterface.formFactor === "phone"}
-        editorInterface={editorInterface}
-        app={app}
-      />
+      {!isAIEdit && (
+        <HintViewer
+          appState={appState}
+          isMobile={editorInterface.formFactor === "phone"}
+          editorInterface={editorInterface}
+          app={app}
+        />
+      )}
       {heading}
       <Stack.Row gap={isCompactStylesPanel ? 0.5 : 1}>
-        {/* in compact UI the pen mode button is rendered as a separate
-            floating button below the compact actions menu */}
-        {!isCompactStylesPanel && (
-          <PenModeButton
-            checked={appState.penMode}
-            onChange={() => onPenModeToggle(null)}
-            title={t("toolBar.penMode")}
-            penDetected={appState.penDetected}
-          />
-        )}
         <AIToolbarTunnel.Out />
-        {app.props.activeTool == null && (
+        {isAIEdit ? (
+          <AIAnnotationTools {...toolProps} />
+        ) : (
           <>
-            <LockButton
-              checked={appState.activeTool.locked}
-              onChange={onLockToggle}
-              title={t("toolBar.lock")}
-              // the active tool — including its lock state — is host-controlled
-              disabled={app.props.activeTool != null}
-            />
+            {/* in compact UI the pen mode button is rendered as a separate
+            floating button below the compact actions menu */}
+            {!isCompactStylesPanel && (
+              <PenModeButton
+                checked={appState.penMode}
+                onChange={() => onPenModeToggle(null)}
+                title={t("toolBar.penMode")}
+                penDetected={appState.penDetected}
+              />
+            )}
+            {app.props.activeTool == null && (
+              <>
+                <LockButton
+                  checked={appState.activeTool.locked}
+                  onChange={onLockToggle}
+                  title={t("toolBar.lock")}
+                  // the active tool — including its lock state — is host-controlled
+                  disabled={app.props.activeTool != null}
+                />
+
+                <div
+                  className="App-toolbar__divider"
+                  style={{ marginRight: "0.25rem" }}
+                />
+              </>
+            )}
+
+            <HandToolButton {...toolProps} hideKeyBinding />
+            {isCompactStylesPanel ? (
+              <SelectionToolPopover {...toolProps} setAppState={setAppState} />
+            ) : appState.preferredSelectionTool.type === "lasso" ? (
+              <LassoToolButton {...toolProps} />
+            ) : (
+              <SelectionToolButton {...toolProps} />
+            )}
+            <RectangleToolButton {...toolProps} />
+            <DiamondToolButton {...toolProps} />
+            <EllipseToolButton {...toolProps} />
+            <ArrowToolButton {...toolProps} />
+            <LineToolButton {...toolProps} />
+            {isCompactStylesPanel ? (
+              <FreedrawToolPopover {...toolProps} />
+            ) : (
+              <FreedrawToolButton {...toolProps} />
+            )}
+            <TextToolButton {...toolProps} />
+            {UIOptions.tools?.image !== false && (
+              <ImageToolButton {...toolProps} />
+            )}
+            <CalloutToolButton {...toolProps} />
+            <EraserToolButton {...toolProps} />
 
             <div
               className="App-toolbar__divider"
-              style={{ marginRight: "0.25rem" }}
+              style={{ marginLeft: "0.25rem" }}
             />
+
+            <ExtraToolsDropdown
+              app={app}
+              activeTool={activeTool}
+              setAppState={setAppState}
+            />
+            <ExtraToolbarTunnel.Out />
           </>
         )}
-
-        <HandToolButton {...toolProps} hideKeyBinding />
-        {isCompactStylesPanel ? (
-          <SelectionToolPopover {...toolProps} setAppState={setAppState} />
-        ) : appState.preferredSelectionTool.type === "lasso" ? (
-          <LassoToolButton {...toolProps} />
-        ) : (
-          <SelectionToolButton {...toolProps} />
-        )}
-        <RectangleToolButton {...toolProps} />
-        <DiamondToolButton {...toolProps} />
-        <EllipseToolButton {...toolProps} />
-        <ArrowToolButton {...toolProps} />
-        <LineToolButton {...toolProps} />
-        {isCompactStylesPanel ? (
-          <FreedrawToolPopover {...toolProps} />
-        ) : (
-          <FreedrawToolButton {...toolProps} />
-        )}
-        <TextToolButton {...toolProps} />
-        {UIOptions.tools?.image !== false && <ImageToolButton {...toolProps} />}
-        <CalloutToolButton {...toolProps} />
-        <EraserToolButton {...toolProps} />
-
-        <div
-          className="App-toolbar__divider"
-          style={{ marginLeft: "0.25rem" }}
-        />
-
-        <ExtraToolsDropdown
-          app={app}
-          activeTool={activeTool}
-          setAppState={setAppState}
-        />
-        <ExtraToolbarTunnel.Out />
       </Stack.Row>
+      {isAIEdit && <AIAnnotationHint />}
     </Island>
   );
 };

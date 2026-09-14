@@ -950,39 +950,6 @@ const AIManipulationUI: React.FC<{
         onAccept={handleAccept}
         onReject={handleReject}
       />
-
-      {/* AI Mode Hint - shows in same style as HintViewer */}
-      {isAIModeActive && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: "80px",
-            left: "50%",
-            transform: "translateX(-50%)",
-            pointerEvents: "none",
-            color: "var(--color-gray-40)",
-            fontSize: "0.75rem",
-            textAlign: "center",
-            zIndex: 100,
-          }}
-        >
-          <kbd
-            style={{
-              display: "inline-block",
-              margin: "0 2px",
-              fontFamily: "monospace",
-              border: "1px solid var(--color-gray-40)",
-              borderRadius: "4px",
-              padding: "1px 4px",
-              fontSize: "10px",
-            }}
-          >
-            Shift
-          </kbd>
-          +Click to place markers
-          {referencePoints.length > 0 && ` (${referencePoints.length} placed)`}
-        </div>
-      )}
     </>
   );
 };
@@ -1139,6 +1106,13 @@ const AIToolbarButton: React.FC<{
 
   // Toggle AI mode
   const handleToggle = useCallback(() => {
+    if (!excalidrawAPI || isProcessing) {
+      return;
+    }
+    excalidrawAPI.setActiveTool({ type: "selection" });
+    excalidrawAPI.updateScene({
+      appState: { selectedElementIds: {}, openMenu: null, openPopup: null },
+    });
     if (isAIModeActive) {
       // Exiting AI mode via toggle (not accept/reject)
       // Resume history recording
@@ -1179,151 +1153,45 @@ const AIToolbarButton: React.FC<{
     enterAIMode,
     setElementsSnapshot,
     initializeAIUndoState,
+    isProcessing,
   ]);
 
-  // Allow execution when AI mode is active - user can provide context via:
-  // - Reference points (Shift+Click markers)
-  // - Drawn annotations (arrows, circles, text, etc.)
-  // - Just a text command (e.g., "make this brighter")
-  const canExecute = isAIModeActive;
-
   return (
-    <div style={{ position: "relative", display: "inline-flex" }}>
-      {/* Main AI button */}
-      <button
-        type="button"
-        onClick={handleToggle}
-        disabled={isProcessing}
-        title={isAIModeActive ? "Exit AI Edit mode" : "AI Edit"}
-        className="ToolIcon_type_button"
-        aria-label="AI Edit"
-        aria-pressed={isAIModeActive}
-        style={{
-          color: isAIModeActive ? "var(--color-primary)" : undefined,
-          backgroundColor: isAIModeActive
-            ? "var(--color-primary-light)"
-            : undefined,
-        }}
+    <div className="editor-mode-controls">
+      <div
+        className="editor-mode-switch"
+        role="group"
+        aria-label="Editing mode"
       >
-        <div className="ToolIcon__icon" aria-hidden="true">
-          {MagicIcon}
-        </div>
-      </button>
-
-      {/* Popover when AI mode is active */}
-      {isAIModeActive && (
-        <div
-          style={{
-            position: "absolute",
-            top: "100%",
-            left: "50%",
-            transform: "translateX(-50%)",
-            marginTop: "8px",
-            backgroundColor: "rgba(255, 255, 255, 0.85)",
-            backdropFilter: "blur(8px)",
-            borderRadius: "8px",
-            boxShadow: "0 2px 12px rgba(0, 0, 0, 0.15)",
-            padding: "8px",
-            zIndex: 100,
-            whiteSpace: "nowrap",
-          }}
+        <button
+          type="button"
+          aria-pressed={!isAIModeActive}
+          disabled={isProcessing || !excalidrawAPI}
+          onClick={() => isAIModeActive && handleToggle()}
         >
-          {/* Arrow */}
-          <div
-            style={{
-              position: "absolute",
-              top: "-6px",
-              left: "50%",
-              transform: "translateX(-50%)",
-              width: 0,
-              height: 0,
-              borderLeft: "6px solid transparent",
-              borderRight: "6px solid transparent",
-              borderBottom: "6px solid rgba(255, 255, 255, 0.85)",
-            }}
-          />
-          {/* Help hint in handwriting style */}
-          <div
-            style={{
-              padding: "8px 4px",
-              fontFamily: "Virgil, Segoe UI Emoji, sans-serif",
-              fontSize: "12px",
-              color: "var(--color-gray-60)",
-              lineHeight: 1.4,
-              maxWidth: "180px",
-              textAlign: "left",
-            }}
-          >
-            <div style={{ marginBottom: "4px" }}>
-              <kbd
-                style={{
-                  fontFamily: "inherit",
-                  backgroundColor: "var(--color-gray-20)",
-                  padding: "1px 4px",
-                  borderRadius: "3px",
-                  fontSize: "11px",
-                }}
-              >
-                Shift
-              </kbd>
-              +Click to place markers
-            </div>
-            <div style={{ marginBottom: "8px" }}>Draw shapes to annotate</div>
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <button
-                type="button"
-                onClick={handleExecute}
-                disabled={!canExecute || isProcessing}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "4px",
-                  padding: "4px 8px",
-                  backgroundColor: canExecute
-                    ? "var(--color-primary)"
-                    : "var(--color-gray-30)",
-                  color: canExecute ? "white" : "var(--color-gray-60)",
-                  border: "none",
-                  borderRadius: "6px",
-                  fontSize: "11px",
-                  fontFamily: "Assistant, system-ui, sans-serif",
-                  fontWeight: 600,
-                  cursor: canExecute ? "pointer" : "not-allowed",
-                }}
-              >
-                {isProcessing ? (
-                  <>
-                    <span
-                      style={{
-                        width: "10px",
-                        height: "10px",
-                        border: "2px solid currentColor",
-                        borderTopColor: "transparent",
-                        borderRadius: "50%",
-                        animation: "spin 1s linear infinite",
-                      }}
-                    />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    {MagicIcon}
-                    Execute
-                    {referencePoints.length > 0 &&
-                      ` (${referencePoints.length})`}
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-          <style>
-            {`
-              @keyframes spin {
-                to { transform: rotate(360deg); }
-              }
-            `}
-          </style>
-        </div>
+          Edit
+        </button>
+        <button
+          type="button"
+          aria-pressed={isAIModeActive}
+          disabled={isProcessing || !excalidrawAPI}
+          onClick={() => !isAIModeActive && handleToggle()}
+        >
+          AI Edit
+        </button>
+      </div>
+      {isAIModeActive && (
+        <button
+          type="button"
+          className="ai-edit-execute"
+          onClick={handleExecute}
+          disabled={isProcessing}
+          title="Describe and apply your AI edit"
+        >
+          {MagicIcon}
+          {isProcessing ? "Processing…" : "Apply with AI"}
+          {referencePoints.length > 0 && ` (${referencePoints.length})`}
+        </button>
       )}
     </div>
   );
@@ -1346,6 +1214,7 @@ const AIToolbarTunnelContent: React.FC<{
 };
 
 const ExcalidrawWrapper = () => {
+  const { isAIModeActive } = useAIManipulation();
   const excalidrawAPI = useExcalidrawAPI();
 
   const [errorMessage, setErrorMessage] = useState("");
@@ -1924,6 +1793,7 @@ const ExcalidrawWrapper = () => {
       })}
     >
       <Excalidraw
+        editingMode={isAIModeActive ? "ai" : "edit"}
         viewportStatusFrame={viewportStatusFrame}
         userToFollow={userToFollow}
         onChange={onChange}

@@ -1,6 +1,24 @@
 @use "../css/variables.module" as *;
 
 .excalidraw {
+  .App-toolbar--ai {
+    flex-direction: column;
+  }
+
+  .AI-annotation-hint {
+    flex-basis: 100%;
+    margin: 0.25rem 0;
+    color: var(--color-on-surface);
+    font-size: 0.75rem;
+    line-height: 1.4;
+    text-align: center;
+  }
+
+  .AI-annotation-tools {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
   .App-toolbar {
     &.zen-mode {
       .ToolIcon__keybinding,
