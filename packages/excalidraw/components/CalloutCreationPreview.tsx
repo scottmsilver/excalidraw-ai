@@ -1,4 +1,9 @@
-import { ROUNDNESS, sceneCoordsToViewportCoords } from "@excalidraw/common";
+import {
+  ROUNDNESS,
+  getLineHeight,
+  sceneCoordsToViewportCoords,
+} from "@excalidraw/common";
+import { getApproxMinLineHeight } from "@excalidraw/element";
 import { getCalloutPlacement } from "@excalidraw/element/calloutCreation";
 import { perimeterRatioToPoint } from "@excalidraw/element/callout";
 
@@ -57,6 +62,10 @@ export const CalloutCreationPreview = ({
       appState.currentItemRoundness === "round"
         ? { type: ROUNDNESS.ADAPTIVE_RADIUS }
         : null,
+      getApproxMinLineHeight(
+        appState.currentItemFontSize,
+        getLineHeight(appState.currentItemFontFamily),
+      ),
     );
     const attachment = perimeterRatioToPoint(
       placement.tailAttachment,
@@ -122,7 +131,7 @@ export const CalloutCreationPreview = ({
       </svg>
       {creation.phase === "awaiting-box" && (
         <div className="callout-creation-hint">
-          Arrow set. Drag to place the callout.
+          Arrow set. Tap where the box bottom should be, or drag to size.
         </div>
       )}
     </div>

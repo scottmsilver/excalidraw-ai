@@ -11,6 +11,9 @@
   bottom: 24px;
   transform: translateX(-50%);
   z-index: var(--zIndex-svgLayer);
+  width: max-content;
+  max-width: calc(100% - 32px);
+  text-align: center;
   padding: 8px 12px;
   border-radius: 8px;
   background: var(--color-surface-high);

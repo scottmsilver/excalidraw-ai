@@ -4,6 +4,21 @@ import { getCalloutPlacement } from "../src/calloutCreation";
 import { perimeterRatioToPoint } from "../src/callout";
 
 describe("tip-first callout placement", () => {
+  it("keeps a short dragged box's bottom fixed when text needs more height", () => {
+    const placement = getCalloutPlacement(
+      [100, 100],
+      [240, 200],
+      [340, 212],
+      true,
+      null,
+      35,
+    );
+    expect(placement).toMatchObject({ x: 240, y: 177, width: 100, height: 35 });
+    expect([
+      placement.x + placement.tailTip[0],
+      placement.y + placement.tailTip[1],
+    ]).toEqual([100, 100]);
+  });
   it.each([
     [
       [300, 300],
@@ -43,7 +58,7 @@ describe("tip-first callout placement", () => {
     },
   );
 
-  it("uses a default box at the second press for a click-sized gesture", () => {
+  it("centers a default box above the second tap", () => {
     const placement = getCalloutPlacement(
       [100, 100],
       [300, 200],
@@ -57,7 +72,7 @@ describe("tip-first callout placement", () => {
       placement.y,
       placement.width,
       placement.height,
-    ]).toEqual([300, 200, 160, 100]);
+    ]).toEqual([220, 100, 160, 100]);
     expect([
       placement.x + placement.tailTip[0],
       placement.y + placement.tailTip[1],
