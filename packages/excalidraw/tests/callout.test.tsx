@@ -1,10 +1,11 @@
 import React from "react";
 import { fireEvent } from "@testing-library/react";
 
-import { KEYS, MQ_MIN_WIDTH_DESKTOP } from "@excalidraw/common";
+import { KEYS, MQ_MIN_WIDTH_DESKTOP, ROUNDNESS } from "@excalidraw/common";
 import { exportToSvg } from "@excalidraw/utils";
 import {
   getElementBounds,
+  getCornerRadius,
   getNonDeletedElements,
   newCalloutElement,
 } from "@excalidraw/element";
@@ -23,6 +24,7 @@ import { moveElement } from "../components/Stats/utils";
 
 import { Excalidraw } from "../index";
 import { restoreElements } from "../data/restore";
+import { getNormalizedZoom } from "../scene";
 
 import { API } from "./helpers/api";
 import { getTextEditor, updateTextEditor } from "./queries/dom";
@@ -204,6 +206,7 @@ describe("restored callout tool", () => {
     const previewY = Number(preview?.getAttribute("y"));
     const previewWidth = Number(preview?.getAttribute("width"));
     const previewHeight = Number(preview?.getAttribute("height"));
+    expect(Number(preview?.getAttribute("rx"))).toBe(0);
     const previewJoin = [
       Number(leader.getAttribute("x2")),
       Number(leader.getAttribute("y2")),
@@ -219,6 +222,28 @@ describe("restored callout tool", () => {
     ]);
     expect(previewJoin[0]).toBeCloseTo(getCalloutAttachment(callout)[0]);
     expect(previewJoin[1]).toBeCloseTo(getCalloutAttachment(callout)[1]);
+    Keyboard.exitTextEditor(await getTextEditor());
+  });
+
+  it("scales the rounded drag preview corner to match the final box", async () => {
+    API.setAppState({
+      currentItemRoundness: "round",
+      zoom: { value: getNormalizedZoom(2) },
+    });
+    Keyboard.keyPress(KEYS.C);
+    mouse.clickAt(100, 100);
+    mouse.downAt(300, 200);
+    mouse.moveTo(500, 320);
+    const preview = document.querySelector(".callout-creation-preview rect");
+    expect(preview).toBeTruthy();
+    const sceneHeight = Number(preview?.getAttribute("height")) / 2;
+    const sceneWidth = Number(preview?.getAttribute("width")) / 2;
+    const expectedRadius =
+      getCornerRadius(Math.min(sceneWidth, sceneHeight), {
+        roundness: { type: ROUNDNESS.ADAPTIVE_RADIUS },
+      }) * 2;
+    expect(Number(preview?.getAttribute("rx"))).toBeCloseTo(expectedRadius);
+    mouse.up();
     Keyboard.exitTextEditor(await getTextEditor());
   });
 
