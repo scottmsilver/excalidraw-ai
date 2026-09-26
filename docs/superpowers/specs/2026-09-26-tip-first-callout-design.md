@@ -11,7 +11,7 @@ Place a callout by pointing at the subject first, then drawing its box. The gest
 3. Press anywhere near the desired box and drag to size it. The second press anchors one box corner, and release sets the opposite corner. Normalize the rectangle for all four drag directions. The box previews during this drag. The arrow keeps its original tip and attaches to the nearest point on the actual rounded box perimeter, including when the tip lies inside the box.
 4. Release to finish. A second click without meaningful movement places a 160 × 100 scene-unit box with its top-left corner at the click. Focus the callout text editor immediately. Respect tool locking as existing callout creation does.
 
-The two drags are explicit. No pause, direction-change, or speed heuristic changes the phase. Do not require the second press to hit the leader endpoint.
+The two press/release gestures are explicit. No pause, direction-change, or speed heuristic changes the phase. Do not require the second press to hit the leader endpoint.
 
 ## Feedback and recovery
 
