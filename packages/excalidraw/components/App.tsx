@@ -10274,6 +10274,44 @@ class App extends React.Component<AppProps, AppState> {
     elementType: ExcalidrawLinearElement["type"],
     pointerDownState: PointerDownState,
   ): void => {
+    // Touch and pen taps have no hover event to position the next polygon
+    // corner. Commit their coordinates before the native line closing logic.
+    if (
+      this.props.editingMode === "ai" &&
+      elementType === "line" &&
+      event.pointerType !== "mouse" &&
+      this.state.multiElement &&
+      this.state.selectedLinearElement
+    ) {
+      const { multiElement, selectedLinearElement } = this.state;
+      const { points, x, y } = multiElement;
+      const nextPoint = pointFrom<LocalPoint>(
+        pointerDownState.origin.x - x,
+        pointerDownState.origin.y - y,
+      );
+      const lastPoint = points[points.length - 1];
+      if (pointDistance(nextPoint, lastPoint) >= LINE_CONFIRM_THRESHOLD) {
+        const nextPoints =
+          lastPoint === selectedLinearElement.lastCommittedPoint
+            ? [...points, nextPoint]
+            : [...points.slice(0, -1), nextPoint];
+        this.store.scheduleCapture();
+        this.scene.mutateElement(multiElement, { points: nextPoints });
+        flushSync(() => {
+          this.setState({
+            selectedLinearElement: {
+              ...selectedLinearElement,
+              selectedPointsIndices: [nextPoints.length - 1],
+              initialState: {
+                ...selectedLinearElement.initialState,
+                lastClickedPoint: nextPoints.length - 1,
+              },
+            },
+          });
+        });
+      }
+    }
+
     if (event.ctrlKey) {
       flushSync(() => {
         this.setState({
@@ -12146,7 +12184,10 @@ class App extends React.Component<AppProps, AppState> {
           newElement &&
           !multiElement
         ) {
-          if (this.editorInterface.isTouchScreen) {
+          if (
+            this.editorInterface.isTouchScreen &&
+            !(this.props.editingMode === "ai" && newElement.type === "line")
+          ) {
             const FIXED_DELTA_X = Math.min(
               (this.state.width * 0.7) / this.state.zoom.value,
               100,

@@ -319,7 +319,9 @@ export const Toolbar = ({
           </>
         )}
       </Stack.Row>
-      {isAIEdit && <AIAnnotationHint />}
+      {isAIEdit && (
+        <AIAnnotationHint polygonSelected={activeTool.type === "line"} />
+      )}
     </Island>
   );
 };

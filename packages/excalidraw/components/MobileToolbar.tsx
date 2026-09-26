@@ -387,7 +387,9 @@ export const MobileToolbar = ({ app, setAppState }: MobileToolbarProps) => {
           </DropdownMenu>
         </>
       )}
-      {app.props.editingMode === "ai" && <AIAnnotationHint />}
+      {app.props.editingMode === "ai" && (
+        <AIAnnotationHint polygonSelected={activeTool.type === "line"} />
+      )}
     </div>
   );
 };
