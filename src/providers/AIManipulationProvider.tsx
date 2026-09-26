@@ -59,6 +59,8 @@ import type { ExportBounds } from "../components/ManipulationDialog/types";
  * The value provided by AIManipulationContext
  */
 export interface AIManipulationContextValue {
+  /** Start a request and return a guard invalidated by another request or accept/reject. */
+  beginEditRequest: () => () => boolean;
   // Reference Points State & Actions
   /** Array of currently placed reference points */
   referencePoints: ReferencePoint[];
@@ -290,18 +292,29 @@ export function AIManipulationProvider({
     setIsReviewing(true);
   }, []);
 
+  const editRequestVersion = useRef(0);
+  const beginEditRequest = useCallback(() => {
+    const version = ++editRequestVersion.current;
+    return () => editRequestVersion.current === version;
+  }, []);
+
   // Shared cleanup for accept/reject - aborts processing and clears state
   const stopAndClear = useCallback(() => {
+    editRequestVersion.current += 1;
     abortAgenticEdit();
     setManualIsProcessing(false);
+    setManualProgress(null);
     setIsReviewing(false);
     setIterationImages([]);
   }, [abortAgenticEdit]);
 
   // Accept result at given index (can be called during thinking or reviewing)
-  const acceptResult = useCallback((_index: number) => {
-    stopAndClear();
-  }, [stopAndClear]);
+  const acceptResult = useCallback(
+    (_index: number) => {
+      stopAndClear();
+    },
+    [stopAndClear],
+  );
 
   // Reject result (can be called during thinking or reviewing)
   const rejectResult = useCallback(() => {
@@ -349,7 +362,7 @@ export function AIManipulationProvider({
   >([]);
 
   const setElementsSnapshot = useCallback((elements: readonly unknown[]) => {
-    setElementsSnapshotState(elements);
+    setElementsSnapshotState(structuredClone(elements));
   }, []);
 
   // AI Mode Undo Stack - using refs to avoid re-render loops
@@ -368,7 +381,7 @@ export function AIManipulationProvider({
   // Initialize AI undo tracking with the current state (called when entering AI mode)
   // This sets the baseline state without pushing to the undo stack
   const initializeAIUndoState = useCallback((elements: readonly unknown[]) => {
-    currentAIElementsRef.current = elements;
+    currentAIElementsRef.current = structuredClone(elements);
     // Don't push to stack - this is the baseline state that we can't undo past
   }, []);
 
@@ -388,11 +401,11 @@ export function AIManipulationProvider({
       // Quick version check - if any element has different version, it changed
       const currentVersions = new Set(
         (current as Array<{ id: string; version: number }>).map(
-          (el) => `${el.id}:${el.version}`
-        )
+          (el) => `${el.id}:${el.version}`,
+        ),
       );
       hasChanged = (elements as Array<{ id: string; version: number }>).some(
-        (el) => !currentVersions.has(`${el.id}:${el.version}`)
+        (el) => !currentVersions.has(`${el.id}:${el.version}`),
       );
     }
 
@@ -404,7 +417,7 @@ export function AIManipulationProvider({
       forceUpdate((n) => n + 1); // Update canAIUndo/canAIRedo
     }
 
-    currentAIElementsRef.current = elements;
+    currentAIElementsRef.current = structuredClone(elements);
   }, []);
 
   // Undo within AI mode
@@ -416,14 +429,17 @@ export function AIManipulationProvider({
     const newStack = [...aiUndoStackRef.current];
     const previousElements = newStack.pop()!;
     aiUndoStackRef.current = newStack;
-    aiRedoStackRef.current = [...aiRedoStackRef.current, currentAIElementsRef.current];
+    aiRedoStackRef.current = [
+      ...aiRedoStackRef.current,
+      currentAIElementsRef.current,
+    ];
     currentAIElementsRef.current = previousElements;
     forceUpdate((n) => n + 1); // Update canAIUndo/canAIRedo
     // Reset flag after a tick to allow future onChange events
     setTimeout(() => {
       isRestoringRef.current = false;
     }, 50);
-    return previousElements;
+    return structuredClone(previousElements);
   }, []);
 
   // Redo within AI mode
@@ -435,14 +451,17 @@ export function AIManipulationProvider({
     const newStack = [...aiRedoStackRef.current];
     const nextElements = newStack.pop()!;
     aiRedoStackRef.current = newStack;
-    aiUndoStackRef.current = [...aiUndoStackRef.current, currentAIElementsRef.current];
+    aiUndoStackRef.current = [
+      ...aiUndoStackRef.current,
+      currentAIElementsRef.current,
+    ];
     currentAIElementsRef.current = nextElements;
     forceUpdate((n) => n + 1); // Update canAIUndo/canAIRedo
     // Reset flag after a tick to allow future onChange events
     setTimeout(() => {
       isRestoringRef.current = false;
     }, 50);
-    return nextElements;
+    return structuredClone(nextElements);
   }, []);
 
   // Clear AI undo/redo stacks
@@ -516,9 +535,8 @@ export function AIManipulationProvider({
     // AI Edit actions
     executeEdit,
     resetEditState: () => {
+      stopAndClear();
       resetAgenticEdit();
-      setIterationImages([]);
-      setIsReviewing(false);
     },
     setIsProcessing,
     setProgress,
@@ -526,6 +544,8 @@ export function AIManipulationProvider({
     enterReviewMode,
     acceptResult,
     rejectResult,
+
+    beginEditRequest,
 
     // AI Mode Undo Stack
     canAIUndo,

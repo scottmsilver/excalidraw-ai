@@ -16,6 +16,12 @@ import type { AppState, Zoom } from "@excalidraw/excalidraw/types";
 import type { Bounds } from "@excalidraw/common";
 
 import { getElementAbsoluteCoords } from "./bounds";
+import { getCalloutSelectionFrame } from "./calloutTransform";
+import {
+  isPointOnCalloutTailHandle,
+  isPointOnCalloutAttachmentHandle,
+} from "./callout";
+import { isCalloutElement } from "./typeChecks";
 import {
   getTransformHandlesFromCoords,
   getTransformHandles,
@@ -59,7 +65,14 @@ export const resizeTest = <Point extends GlobalPoint | LocalPoint>(
   if (!appState.selectedElementIds[element.id]) {
     return false;
   }
-
+  if (
+    isCalloutElement(element) &&
+    !element.locked &&
+    (isPointOnCalloutTailHandle(element, x, y, zoom.value) ||
+      isPointOnCalloutAttachmentHandle(element, x, y, zoom.value))
+  ) {
+    return false;
+  }
   const { rotation: rotationTransformHandle, ...transformHandles } =
     getTransformHandles(
       element,
@@ -67,7 +80,15 @@ export const resizeTest = <Point extends GlobalPoint | LocalPoint>(
       elementsMap,
       pointerType,
       getOmitSidesForEditorInterface(editorInterface),
+      appState.calloutSelectionMode,
     );
+
+  if (
+    isCalloutElement(element) &&
+    (appState.calloutSelectionMode === "whole" || element.groupIds.length)
+  ) {
+    element = getCalloutSelectionFrame(element) as NonDeletedExcalidrawElement;
+  }
 
   if (
     rotationTransformHandle &&

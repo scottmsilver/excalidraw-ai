@@ -31,7 +31,9 @@ export const createLoadingPlaceholderDataURL = (
       <animateTransform attributeName="transform" type="rotate" from="0 ${cx} ${cy}" to="360 ${cx} ${cy}" dur="1s" repeatCount="indefinite"/>
     </circle>
   </g>
-  <text x="${cx}" y="${height / 2 + 30}" text-anchor="middle" fill="${textColor}" font-family="system-ui, sans-serif" font-size="14">Converting...</text>
+  <text x="${cx}" y="${
+    height / 2 + 30
+  }" text-anchor="middle" fill="${textColor}" font-family="system-ui, sans-serif" font-size="14">Converting...</text>
 </svg>`;
 
   return `data:image/svg+xml;base64,${btoa(svg)}`;

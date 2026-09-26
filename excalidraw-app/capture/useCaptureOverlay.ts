@@ -33,7 +33,9 @@ export const useCaptureOverlay = ({
 
   // Set hand tool when activated
   useEffect(() => {
-    if (!excalidrawAPI) return;
+    if (!excalidrawAPI) {
+      return;
+    }
 
     if (isActive) {
       const currentTool = excalidrawAPI.getAppState().activeTool;
@@ -52,7 +54,9 @@ export const useCaptureOverlay = ({
 
   // Handle escape key
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive) {
+      return;
+    }
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -66,7 +70,9 @@ export const useCaptureOverlay = ({
 
   const getSceneCoords = useCallback(
     (clientX: number, clientY: number) => {
-      if (!excalidrawAPI) return null;
+      if (!excalidrawAPI) {
+        return null;
+      }
       return screenToScene(clientX, clientY, excalidrawAPI.getAppState());
     },
     [excalidrawAPI],
@@ -74,10 +80,16 @@ export const useCaptureOverlay = ({
 
   const getScreenBounds = useCallback(
     (bounds: CaptureRegionBounds) => {
-      if (!excalidrawAPI) return null;
+      if (!excalidrawAPI) {
+        return null;
+      }
       const appState = excalidrawAPI.getAppState();
       const topLeft = sceneToScreen(bounds.x, bounds.y, appState);
-      const bottomRight = sceneToScreen(bounds.x + bounds.width, bounds.y + bounds.height, appState);
+      const bottomRight = sceneToScreen(
+        bounds.x + bounds.width,
+        bounds.y + bounds.height,
+        appState,
+      );
       return {
         x: topLeft.x,
         y: topLeft.y,
@@ -90,7 +102,9 @@ export const useCaptureOverlay = ({
 
   const getScreenPoints = useCallback(
     (points: Array<[number, number]>) => {
-      if (!excalidrawAPI || points.length === 0) return [];
+      if (!excalidrawAPI || points.length === 0) {
+        return [];
+      }
       const appState = excalidrawAPI.getAppState();
       return points.map(([x, y]) => {
         const screen = sceneToScreen(x, y, appState);
@@ -103,15 +117,23 @@ export const useCaptureOverlay = ({
   const startDrawing = useCallback(
     (clientX: number, clientY: number) => {
       const coords = getSceneCoords(clientX, clientY);
-      if (coords) setIsDrawing(true);
+      if (coords) {
+        setIsDrawing(true);
+      }
       return coords;
     },
     [getSceneCoords],
   );
 
   const finishCapture = useCallback(
-    async (canvas: HTMLCanvasElement, bounds: CaptureRegionBounds, maskPoints?: Array<[number, number]>) => {
-      if (!excalidrawAPI) return;
+    async (
+      canvas: HTMLCanvasElement,
+      bounds: CaptureRegionBounds,
+      maskPoints?: Array<[number, number]>,
+    ) => {
+      if (!excalidrawAPI) {
+        return;
+      }
       await createImageFromCapture(excalidrawAPI, canvas, bounds, maskPoints);
       captureCompletedRef.current = true;
       onCaptureComplete();

@@ -7,7 +7,6 @@
 .eslintcache
 .history
 .idea
-.vercel
 .vscode
 .yarn
 *.log

@@ -6,7 +6,11 @@ import {
   sceneCoordsToViewportCoords,
 } from "@excalidraw/common";
 
-import type { AppState, ExcalidrawImperativeAPI, DataURL } from "@excalidraw/excalidraw/types";
+import type {
+  AppState,
+  ExcalidrawImperativeAPI,
+  DataURL,
+} from "@excalidraw/excalidraw/types";
 import type { FileId } from "@excalidraw/element/types";
 
 import { MIN_CAPTURE_SIZE } from "./captureStyles";
@@ -198,12 +202,14 @@ export const createImageFromCapture = async (
  * Check if a click is on the capture tool button or mode switcher.
  */
 export const isClickOnCaptureUI = (clientX: number, clientY: number): boolean =>
-  document.elementsFromPoint(clientX, clientY).some(
-    (el) =>
-      el instanceof HTMLElement &&
-      (el.closest('[data-testid="capture-tool-button"]') ||
-        el.closest('[data-capture-mode-switcher]')),
-  );
+  document
+    .elementsFromPoint(clientX, clientY)
+    .some(
+      (el) =>
+        el instanceof HTMLElement &&
+        (el.closest('[data-testid="capture-tool-button"]') ||
+          el.closest("[data-capture-mode-switcher]")),
+    );
 
 /**
  * Get the static canvas element (first canvas with excalidraw__canvas class).

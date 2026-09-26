@@ -31,12 +31,16 @@ interface MaskedImageInfo {
  * Renders a dim overlay on the negative space (area outside the mask but inside bounds)
  * for selected masked images (captured via lasso/polygon).
  */
-export const MaskedImageSelectionOverlay: React.FC<Props> = ({ excalidrawAPI }) => {
+export const MaskedImageSelectionOverlay: React.FC<Props> = ({
+  excalidrawAPI,
+}) => {
   const [maskedImages, setMaskedImages] = useState<MaskedImageInfo[]>([]);
 
   // Subscribe to changes and update when selection changes
   useEffect(() => {
-    if (!excalidrawAPI) return;
+    if (!excalidrawAPI) {
+      return;
+    }
 
     const updateMaskedImages = () => {
       const appState = excalidrawAPI.getAppState();
@@ -59,7 +63,7 @@ export const MaskedImageSelectionOverlay: React.FC<Props> = ({ excalidrawAPI }) 
           const bottomRight = sceneToScreen(
             element.x + element.width,
             element.y + element.height,
-            appState
+            appState,
           );
 
           result.push({
@@ -91,7 +95,9 @@ export const MaskedImageSelectionOverlay: React.FC<Props> = ({ excalidrawAPI }) 
     };
   }, [excalidrawAPI]);
 
-  if (maskedImages.length === 0) return null;
+  if (maskedImages.length === 0) {
+    return null;
+  }
 
   return (
     <svg
@@ -106,7 +112,10 @@ export const MaskedImageSelectionOverlay: React.FC<Props> = ({ excalidrawAPI }) 
       }}
     >
       {maskedImages.map(({ element, maskData, screenBounds }) => {
-        const screenPoints = denormalizePoints(maskData.normalizedPoints, screenBounds);
+        const screenPoints = denormalizePoints(
+          maskData.normalizedPoints,
+          screenBounds,
+        );
         const polygonStr = pointsToPolygonString(screenPoints);
         const centerX = screenBounds.x + screenBounds.width / 2;
         const centerY = screenBounds.y + screenBounds.height / 2;
@@ -116,7 +125,13 @@ export const MaskedImageSelectionOverlay: React.FC<Props> = ({ excalidrawAPI }) 
           <g key={`selection-${element.id}`}>
             <defs>
               <mask id={`selection-mask-${element.id}`}>
-                <rect x={screenBounds.x} y={screenBounds.y} width={screenBounds.width} height={screenBounds.height} fill="white" />
+                <rect
+                  x={screenBounds.x}
+                  y={screenBounds.y}
+                  width={screenBounds.width}
+                  height={screenBounds.height}
+                  fill="white"
+                />
                 <polygon points={polygonStr} fill="black" />
               </mask>
             </defs>

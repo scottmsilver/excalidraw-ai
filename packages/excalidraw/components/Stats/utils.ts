@@ -1,7 +1,10 @@
 import { pointFrom, pointRotateRads } from "@excalidraw/math";
+import { preserveCalloutTip } from "@excalidraw/element/calloutTransform";
+import { isCalloutElement } from "@excalidraw/element";
 
 import {
   getBoundTextElement,
+  getNonDeletedElements,
   isBindingElement,
   unbindBindingElement,
 } from "@excalidraw/element";
@@ -113,7 +116,7 @@ export const newOrigin = (
 export const moveElement = (
   newTopLeftX: number,
   newTopLeftY: number,
-  originalElement: ExcalidrawElement,
+  originalElement: NonDeletedExcalidrawElement,
   scene: Scene,
   appState: AppState,
   originalElementsMap: ElementsMap,
@@ -163,6 +166,12 @@ export const moveElement = (
     {
       x,
       y,
+      ...(isCalloutElement(originalElement) &&
+      !originalElement.groupIds.length &&
+      scene.getSelectedElements(appState).length === 1 &&
+      appState.calloutSelectionMode === "box"
+        ? preserveCalloutTip(originalElement, { x, y })
+        : {}),
     },
     { informMutation: shouldInformMutation, isDragging: false },
   );
@@ -225,7 +234,7 @@ export const moveElement = (
         { informMutation: shouldInformMutation, isDragging: false },
       );
       updateBindings(latestChildElement, scene, appState, {
-        simultaneouslyUpdated: originalChildren,
+        simultaneouslyUpdated: getNonDeletedElements(originalChildren),
       });
     });
   }

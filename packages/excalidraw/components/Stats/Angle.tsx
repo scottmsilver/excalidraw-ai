@@ -1,4 +1,13 @@
 import { degreesToRadians, radiansToDegrees } from "@excalidraw/math";
+import {
+  preserveCalloutTip,
+  getCalloutSelectionFrame,
+  transformWholeCallout,
+} from "@excalidraw/element/calloutTransform";
+import {
+  isCalloutElement,
+  computeBoundTextPosition,
+} from "@excalidraw/element";
 
 import { getBoundTextElement } from "@excalidraw/element";
 import { isArrowElement, isElbowArrow } from "@excalidraw/element";
@@ -7,7 +16,7 @@ import { updateBindings } from "@excalidraw/element";
 
 import type { Degrees } from "@excalidraw/math";
 
-import type { ExcalidrawElement } from "@excalidraw/element/types";
+import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 
 import type { Scene } from "@excalidraw/element";
 
@@ -20,7 +29,7 @@ import type { DragInputCallbackType } from "./DragInput";
 import type { AppState } from "../../types";
 
 interface AngleProps {
-  element: ExcalidrawElement;
+  element: NonDeletedExcalidrawElement;
   scene: Scene;
   appState: AppState;
   property: "angle";
@@ -48,12 +57,29 @@ const handleDegreeChange: DragInputCallbackType<AngleProps["property"]> = ({
       const nextAngle = degreesToRadians(nextValue as Degrees);
       scene.mutateElement(latestElement, {
         angle: nextAngle,
+        ...(isCalloutElement(origElement)
+          ? app.state.calloutSelectionMode === "box" &&
+            !origElement.groupIds.length
+            ? preserveCalloutTip(origElement, { angle: nextAngle })
+            : transformWholeCallout(
+                origElement,
+                getCalloutSelectionFrame(origElement),
+                { ...getCalloutSelectionFrame(origElement), angle: nextAngle },
+              )
+          : {}),
       });
       updateBindings(latestElement, scene, app.state);
 
       const boundTextElement = getBoundTextElement(latestElement, elementsMap);
       if (boundTextElement && !isArrowElement(latestElement)) {
-        scene.mutateElement(boundTextElement, { angle: nextAngle });
+        scene.mutateElement(boundTextElement, {
+          ...computeBoundTextPosition(
+            latestElement,
+            boundTextElement,
+            elementsMap,
+          ),
+          angle: nextAngle,
+        });
       }
 
       return;
@@ -74,12 +100,29 @@ const handleDegreeChange: DragInputCallbackType<AngleProps["property"]> = ({
 
     scene.mutateElement(latestElement, {
       angle: nextAngle,
+      ...(isCalloutElement(origElement)
+        ? app.state.calloutSelectionMode === "box" &&
+          !origElement.groupIds.length
+          ? preserveCalloutTip(origElement, { angle: nextAngle })
+          : transformWholeCallout(
+              origElement,
+              getCalloutSelectionFrame(origElement),
+              { ...getCalloutSelectionFrame(origElement), angle: nextAngle },
+            )
+        : {}),
     });
     updateBindings(latestElement, scene, app.state);
 
     const boundTextElement = getBoundTextElement(latestElement, elementsMap);
     if (boundTextElement && !isArrowElement(latestElement)) {
-      scene.mutateElement(boundTextElement, { angle: nextAngle });
+      scene.mutateElement(boundTextElement, {
+        ...computeBoundTextPosition(
+          latestElement,
+          boundTextElement,
+          elementsMap,
+        ),
+        angle: nextAngle,
+      });
     }
   }
 };

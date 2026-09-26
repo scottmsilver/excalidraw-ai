@@ -12,8 +12,6 @@ import {
 
 import { pointFrom, pointRotateRads, type Radians } from "@excalidraw/math";
 
-import type { AppState } from "@excalidraw/excalidraw/types";
-
 import type { ExtractSetType } from "@excalidraw/common/utility-types";
 
 import {
@@ -21,14 +19,18 @@ import {
   updateOriginalContainerCache,
 } from "./containerCache";
 import { LinearElementEditor } from "./linearElementEditor";
+import { preserveCalloutTip, transformWholeCallout } from "./calloutTransform";
 
 import { measureText } from "./textMeasurements";
 import { wrapText } from "./textWrapping";
 import {
   isBoundToContainer,
   isArrowElement,
+  isCalloutElement,
   isTextElement,
 } from "./typeChecks";
+
+import { isNonDeletedElement } from ".";
 
 import type { Scene } from "./Scene";
 
@@ -40,7 +42,7 @@ import type {
   ExcalidrawTextContainer,
   ExcalidrawTextElement,
   ExcalidrawTextElementWithContainer,
-  NonDeletedExcalidrawElement,
+  NonDeleted,
 } from "./types";
 
 export const redrawTextBoundingBox = (
@@ -109,7 +111,12 @@ export const redrawTextBoundingBox = (
         metrics.height,
         container.type,
       );
-      scene.mutateElement(container, { height: nextHeight });
+      scene.mutateElement(container, {
+        height: nextHeight,
+        ...(isCalloutElement(container)
+          ? preserveCalloutTip(container, { height: nextHeight })
+          : {}),
+      });
       updateOriginalContainerCache(container.id, nextHeight);
     }
 
@@ -118,7 +125,12 @@ export const redrawTextBoundingBox = (
         metrics.width,
         container.type,
       );
-      scene.mutateElement(container, { width: nextWidth });
+      scene.mutateElement(container, {
+        width: nextWidth,
+        ...(isCalloutElement(container)
+          ? preserveCalloutTip(container, { width: nextWidth })
+          : {}),
+      });
     }
 
     const updatedTextElement = {
@@ -140,10 +152,12 @@ export const redrawTextBoundingBox = (
 };
 
 export const handleBindTextResize = (
-  container: NonDeletedExcalidrawElement,
+  container: ExcalidrawElement,
   scene: Scene,
   transformHandleType: MaybeTransformHandleType,
   shouldMaintainAspectRatio = false,
+  shouldResizeFromCenter = false,
+  calloutSelectionMode: "box" | "whole" = "box",
 ) => {
   const elementsMap = scene.getNonDeletedElementsMap();
   const boundTextElementId = getBoundTextElementId(container);
@@ -191,16 +205,34 @@ export const handleBindTextResize = (
 
       const diff = containerHeight - container.height;
       // fix the y coord when resizing from ne/nw/n
-      const updatedY =
-        !isArrowElement(container) &&
-        (transformHandleType === "ne" ||
-          transformHandleType === "nw" ||
-          transformHandleType === "n")
-          ? container.y - diff
-          : container.y;
+      const shouldResizeFromTop =
+        transformHandleType === "n" ||
+        transformHandleType === "ne" ||
+        transformHandleType === "nw";
+
+      let offsetY = 0;
+      if (!isArrowElement(container)) {
+        if (shouldResizeFromCenter) {
+          offsetY = diff / 2;
+        } else if (shouldResizeFromTop) {
+          offsetY = diff;
+        }
+      }
       scene.mutateElement(container, {
         height: containerHeight,
-        y: updatedY,
+        y: container.y - offsetY,
+        ...(isCalloutElement(container)
+          ? calloutSelectionMode === "whole"
+            ? transformWholeCallout(container, container, {
+                ...container,
+                height: containerHeight,
+                y: container.y - offsetY,
+              })
+            : preserveCalloutTip(container, {
+                height: containerHeight,
+                y: container.y - offsetY,
+              })
+          : {}),
       });
     }
 
@@ -286,36 +318,50 @@ export const getBoundTextElementId = (container: ExcalidrawElement | null) => {
 export const getBoundTextElement = (
   element: ExcalidrawElement | null,
   elementsMap: ElementsMap,
-) => {
+): NonDeleted<ExcalidrawTextElementWithContainer> | null => {
   if (!element) {
     return null;
   }
   const boundTextElementId = getBoundTextElementId(element);
 
   if (boundTextElementId) {
-    return (elementsMap.get(boundTextElementId) ||
-      null) as ExcalidrawTextElementWithContainer | null;
+    const boundTextElement = (elementsMap.get(boundTextElementId) ||
+      null) as NonDeleted<ExcalidrawTextElementWithContainer> | null;
+
+    // SAFETY: This should never happen, but log it just in case
+    if (boundTextElement && !isNonDeletedElement(boundTextElement)) {
+      console.error(
+        "[NONDELETED][INVARIANT] Bound text element `isDeleted: true` which is not expected.",
+      );
+    }
+
+    return boundTextElement;
   }
   return null;
 };
 
-export const getContainerElement = (
-  element: ExcalidrawTextElement | null,
+export const getContainerElement = <
+  T extends ExcalidrawTextElement,
+  R extends ExcalidrawTextContainer,
+>(
+  element: T | null,
   elementsMap: ElementsMap,
-): ExcalidrawTextContainer | null => {
+): R | null => {
   if (!element) {
     return null;
   }
   if (element.containerId) {
-    return (elementsMap.get(element.containerId) ||
-      null) as ExcalidrawTextContainer | null;
+    return (elementsMap.get(element.containerId) || null) as R | null;
   }
   return null;
 };
 
+/**
+ * The point a text bound to this container centers on — and, for arrows, the
+ * point the text tool snaps a new label to.
+ */
 export const getContainerCenter = (
   container: ExcalidrawElement,
-  appState: AppState,
   elementsMap: ElementsMap,
 ) => {
   if (!isArrowElement(container)) {
@@ -324,35 +370,16 @@ export const getContainerCenter = (
       y: container.y + container.height / 2,
     };
   }
-  const points = LinearElementEditor.getPointsGlobalCoordinates(
+
+  const center = LinearElementEditor.getBoundTextElementCenter(
     container,
     elementsMap,
   );
-  if (points.length % 2 === 1) {
-    const index = Math.floor(container.points.length / 2);
-    const midPoint = LinearElementEditor.getPointGlobalCoordinates(
-      container,
-      container.points[index],
-      elementsMap,
-    );
-    return { x: midPoint[0], y: midPoint[1] };
-  }
-  const index = container.points.length / 2 - 1;
-  let midSegmentMidpoint = LinearElementEditor.getEditorMidPoints(
-    container,
-    elementsMap,
-    appState,
-  )[index];
-  if (!midSegmentMidpoint) {
-    midSegmentMidpoint = LinearElementEditor.getSegmentMidPoint(
-      container,
-      index + 1,
-    );
-  }
-  return { x: midSegmentMidpoint[0], y: midSegmentMidpoint[1] };
+
+  return { x: center[0], y: center[1] };
 };
 
-export const getContainerCoords = (container: NonDeletedExcalidrawElement) => {
+export const getContainerCoords = (container: ExcalidrawElement) => {
   let offsetX = BOUND_TEXT_PADDING;
   let offsetY = BOUND_TEXT_PADDING;
 
@@ -400,7 +427,7 @@ export const getBoundTextElementPosition = (
 };
 
 export const shouldAllowVerticalAlign = (
-  selectedElements: NonDeletedExcalidrawElement[],
+  selectedElements: readonly ExcalidrawElement[],
   elementsMap: ElementsMap,
 ) => {
   return selectedElements.some((element) => {
@@ -416,7 +443,7 @@ export const shouldAllowVerticalAlign = (
 };
 
 export const suppportsHorizontalAlign = (
-  selectedElements: NonDeletedExcalidrawElement[],
+  selectedElements: readonly ExcalidrawElement[],
   elementsMap: ElementsMap,
 ) => {
   return selectedElements.some((element) => {
@@ -441,7 +468,8 @@ const VALID_CONTAINER_TYPES = new Set([
 
 export const isValidTextContainer = (element: {
   type: ExcalidrawElementType;
-}) => VALID_CONTAINER_TYPES.has(element.type);
+}): element is ExcalidrawTextContainer =>
+  VALID_CONTAINER_TYPES.has(element.type);
 
 export const computeContainerDimensionForBoundText = (
   dimension: number,
@@ -528,3 +556,5 @@ export const getTextFromElements = (
     .join(separator);
   return text;
 };
+
+export const DEFAULT_BOUND_TEXT_LABEL_POSITION = 0.5;

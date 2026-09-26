@@ -45,7 +45,9 @@ export const CaptureToolButton: React.FC<CaptureToolButtonProps> = ({
   }, []);
 
   return (
-    <div style={{ position: "relative", zIndex: isCaptureMode ? 1000 : undefined }}>
+    <div
+      style={{ position: "relative", zIndex: isCaptureMode ? 1000 : undefined }}
+    >
       <button
         type="button"
         onClick={handleToggle}

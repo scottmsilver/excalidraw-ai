@@ -24,6 +24,8 @@ import React, {
 import { executeAgenticEdit } from "../../services/agenticService";
 import { aiLogService } from "../../../excalidraw-app/ai/aiLogService";
 import { canvasToImage } from "../../utils/coordinateTransforms";
+import { MARKER_COLORS } from "../ReferencePoints/markerColors";
+
 import { useAIManipulation } from "../../providers/AIManipulationProvider";
 
 import type { ReferencePoint } from "../ReferencePoints";
@@ -43,18 +45,6 @@ const INITIAL_STATE: ManipulationDialogState = {
   error: null,
   iteration: undefined,
 };
-
-/**
- * Color palette for marker indicators - matches ReferencePointMarker colors
- */
-const MARKER_COLORS = [
-  "#E53935", // Red
-  "#1E88E5", // Blue
-  "#43A047", // Green
-  "#FB8C00", // Orange
-  "#8E24AA", // Purple
-  "#00ACC1", // Cyan
-] as const;
 
 // =============================================================================
 // Styles (inline for now, can be extracted to CSS/module later)
@@ -130,7 +120,7 @@ const styles = {
     maxHeight: "80px",
     overflowY: "auto" as const,
   },
-  pointIndicator: (backgroundColor: string, isHovered: boolean) => ({
+  pointIndicator: (isHovered: boolean) => ({
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
@@ -139,20 +129,21 @@ const styles = {
     borderRadius: "50%",
     fontSize: "14px",
     fontWeight: 600,
-    backgroundColor,
-    color: "#fff",
+    backgroundColor: MARKER_COLORS.bg,
+    color: MARKER_COLORS.text,
     transition: "all 0.2s ease",
     cursor: "pointer",
+    border: `2px solid ${MARKER_COLORS.border}`,
     transform: isHovered ? "scale(1.15)" : "scale(1)",
     boxShadow: isHovered ? "0 2px 8px rgba(0,0,0,0.3)" : "none",
   }),
-  previewMarker: (backgroundColor: string) => ({
+  previewMarker: () => ({
     position: "absolute" as const,
     width: "24px",
     height: "24px",
     borderRadius: "50%",
-    backgroundColor,
-    color: "#fff",
+    backgroundColor: MARKER_COLORS.bg,
+    color: MARKER_COLORS.text,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -160,7 +151,7 @@ const styles = {
     fontWeight: 600,
     transform: "translate(-50%, -50%)",
     boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
-    border: "2px solid #fff",
+    border: `2px solid ${MARKER_COLORS.border}`,
     zIndex: 10,
     pointerEvents: "none" as const,
   }),
@@ -250,13 +241,6 @@ const styles = {
 // =============================================================================
 
 /**
- * Get the color for a marker based on its index
- */
-function getMarkerColor(index: number): string {
-  return MARKER_COLORS[index % MARKER_COLORS.length];
-}
-
-/**
  * Get a human-readable message for the current step
  */
 function getStepMessage(step: string): string {
@@ -295,7 +279,8 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
   exportBounds,
 }) => {
   // Get context setters for syncing progress state to ThinkingOverlay
-  const { setIsProcessing, setProgress } = useAIManipulation();
+  const { setIsProcessing, setProgress, beginEditRequest } =
+    useAIManipulation();
 
   const [state, setState] = useState<ManipulationDialogState>(INITIAL_STATE);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -493,6 +478,7 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
     if (!canSubmit || !cleanImageBlob) {
       return;
     }
+    const isCurrentRequest = beginEditRequest();
 
     // Reset accumulated text and images for new operation
     accumulatedThinkingRef.current = "";
@@ -531,8 +517,16 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
         referencePoints: transformedReferencePoints,
         shapes,
         command: state.command.trim(),
-        onProgress: handleProgress,
+        onProgress: (event) => {
+          if (isCurrentRequest()) {
+            handleProgress(event);
+          }
+        },
       });
+
+      if (!isCurrentRequest()) {
+        return;
+      }
 
       // End logging operation
       aiLogService.endOperation("complete", "Edit complete!");
@@ -540,6 +534,9 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
       // Don't call onResult here - the review UI will handle accept/reject
       // The result images are collected via onProgress → addIterationImage
     } catch (error) {
+      if (!isCurrentRequest()) {
+        return;
+      }
       const errorMessage =
         error instanceof Error ? error.message : "An unknown error occurred";
 
@@ -553,7 +550,9 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
       console.error("AI Edit failed:", errorMessage);
     } finally {
       // Clear processing state
-      setIsProcessing(false);
+      if (isCurrentRequest()) {
+        setIsProcessing(false);
+      }
     }
   }, [
     canSubmit,
@@ -566,6 +565,7 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
     handleProgress,
     onClose,
     setIsProcessing,
+    beginEditRequest,
   ]);
 
   /**
@@ -668,9 +668,7 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
                       <React.Fragment key={point.id}>
                         <div
                           style={{
-                            ...styles.previewMarker(
-                              getMarkerColor(point.index),
-                            ),
+                            ...styles.previewMarker(),
                             left: pos.x,
                             top: pos.y,
                             transform: `translate(-50%, -50%) scale(${
@@ -712,10 +710,7 @@ export const ManipulationDialog: React.FC<ManipulationDialogProps> = ({
                 {referencePoints.map((point) => (
                   <div
                     key={point.id}
-                    style={styles.pointIndicator(
-                      getMarkerColor(point.index),
-                      hoveredPoint?.id === point.id,
-                    )}
+                    style={styles.pointIndicator(hoveredPoint?.id === point.id)}
                     title={`Point ${point.label}`}
                     onMouseEnter={() => setHoveredPoint(point)}
                     onMouseLeave={() => setHoveredPoint(null)}

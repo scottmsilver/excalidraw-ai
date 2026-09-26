@@ -1,7 +1,16 @@
 import React, { useState, useCallback } from "react";
 
-import { useCaptureOverlay, overlayStyle, type CaptureOverlayProps } from "./useCaptureOverlay";
-import { captureRegionWithMask, getBoundsFromPoints, getStaticCanvas, isClickOnCaptureUI } from "./captureUtils";
+import {
+  useCaptureOverlay,
+  overlayStyle,
+  type CaptureOverlayProps,
+} from "./useCaptureOverlay";
+import {
+  captureRegionWithMask,
+  getBoundsFromPoints,
+  getStaticCanvas,
+  isClickOnCaptureUI,
+} from "./captureUtils";
 import {
   SelectionOverlaySVG,
   selectionOutlineProps,
@@ -16,7 +25,10 @@ import {
 const CLOSE_THRESHOLD = 15;
 
 /** Render vertex circles for polygon points */
-const VertexCircles: React.FC<{ points: Array<[number, number]>; highlightFirst: boolean }> = ({ points, highlightFirst }) => (
+const VertexCircles: React.FC<{
+  points: Array<[number, number]>;
+  highlightFirst: boolean;
+}> = ({ points, highlightFirst }) => (
   <>
     {points.map(([x, y], i) => (
       <circle
@@ -34,39 +46,66 @@ const VertexCircles: React.FC<{ points: Array<[number, number]>; highlightFirst:
 
 export const CapturePolygonOverlay: React.FC<CaptureOverlayProps> = (props) => {
   const [points, setPoints] = useState<Array<[number, number]>>([]);
-  const { isDrawing, startDrawing, getSceneCoords, getScreenPoints, finishCapture, appState } =
-    useCaptureOverlay(props);
+  const {
+    isDrawing,
+    startDrawing,
+    getSceneCoords,
+    getScreenPoints,
+    finishCapture,
+    appState,
+  } = useCaptureOverlay(props);
 
   const completeCapture = useCallback(
     async (polygonPoints: Array<[number, number]>) => {
-      if (!appState || polygonPoints.length < 3) return;
+      if (!appState || polygonPoints.length < 3) {
+        return;
+      }
 
       const bounds = getBoundsFromPoints(polygonPoints);
-      if (bounds.width < MIN_CAPTURE_SIZE || bounds.height < MIN_CAPTURE_SIZE) return;
+      if (bounds.width < MIN_CAPTURE_SIZE || bounds.height < MIN_CAPTURE_SIZE) {
+        return;
+      }
 
       const staticCanvas = getStaticCanvas();
-      if (!staticCanvas) return;
+      if (!staticCanvas) {
+        return;
+      }
 
-      const captured = captureRegionWithMask(staticCanvas, polygonPoints, appState);
-      if (captured) await finishCapture(captured, bounds, polygonPoints);
+      const captured = captureRegionWithMask(
+        staticCanvas,
+        polygonPoints,
+        appState,
+      );
+      if (captured) {
+        await finishCapture(captured, bounds, polygonPoints);
+      }
     },
     [appState, finishCapture],
   );
 
   const handleClick = useCallback(
     async (e: React.MouseEvent) => {
-      if (isClickOnCaptureUI(e.clientX, e.clientY)) return;
+      if (isClickOnCaptureUI(e.clientX, e.clientY)) {
+        return;
+      }
       e.stopPropagation();
       e.preventDefault();
 
-      const coords = isDrawing ? getSceneCoords(e.clientX, e.clientY) : startDrawing(e.clientX, e.clientY);
-      if (!coords) return;
+      const coords = isDrawing
+        ? getSceneCoords(e.clientX, e.clientY)
+        : startDrawing(e.clientX, e.clientY);
+      if (!coords) {
+        return;
+      }
 
       // Check if clicking near the first point to close polygon
       if (points.length >= 3) {
         const screenPoints = getScreenPoints(points);
         const firstPoint = screenPoints[0];
-        const distance = Math.hypot(e.clientX - firstPoint[0], e.clientY - firstPoint[1]);
+        const distance = Math.hypot(
+          e.clientX - firstPoint[0],
+          e.clientY - firstPoint[1],
+        );
 
         if (distance < CLOSE_THRESHOLD) {
           const finalPoints = [...points];
@@ -78,12 +117,21 @@ export const CapturePolygonOverlay: React.FC<CaptureOverlayProps> = (props) => {
 
       setPoints((prev) => [...prev, [coords.x, coords.y]]);
     },
-    [isDrawing, startDrawing, getSceneCoords, getScreenPoints, points, completeCapture],
+    [
+      isDrawing,
+      startDrawing,
+      getSceneCoords,
+      getScreenPoints,
+      points,
+      completeCapture,
+    ],
   );
 
   const handleDoubleClick = useCallback(
     async (e: React.MouseEvent) => {
-      if (isClickOnCaptureUI(e.clientX, e.clientY)) return;
+      if (isClickOnCaptureUI(e.clientX, e.clientY)) {
+        return;
+      }
       e.stopPropagation();
       e.preventDefault();
 
@@ -109,7 +157,9 @@ export const CapturePolygonOverlay: React.FC<CaptureOverlayProps> = (props) => {
     [points, completeCapture],
   );
 
-  if (!props.isActive) return null;
+  if (!props.isActive) {
+    return null;
+  }
 
   const screenPoints = getScreenPoints(points);
   const polygonStr = pointsToPolygonString(screenPoints);
@@ -124,7 +174,10 @@ export const CapturePolygonOverlay: React.FC<CaptureOverlayProps> = (props) => {
       tabIndex={0}
     >
       {screenPoints.length >= 3 && (
-        <SelectionOverlaySVG id="polygon" shape={{ type: "polygon", points: polygonStr }}>
+        <SelectionOverlaySVG
+          id="polygon"
+          shape={{ type: "polygon", points: polygonStr }}
+        >
           <VertexCircles points={screenPoints} highlightFirst />
         </SelectionOverlaySVG>
       )}
@@ -149,7 +202,8 @@ export const CapturePolygonOverlay: React.FC<CaptureOverlayProps> = (props) => {
       )}
       {isDrawing && screenPoints.length >= 3 && (
         <div style={instructionToastStyle}>
-          Double-click or click first point to complete | Backspace to undo | Enter to finish
+          Double-click or click first point to complete | Backspace to undo |
+          Enter to finish
         </div>
       )}
     </div>

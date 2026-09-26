@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, fireEvent, screen } from "@testing-library/react";
 
-import { CaptureToolButton } from "./CaptureToolButton";
-
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+
+import { CaptureToolButton } from "./CaptureToolButton";
 
 // Mock the overlay components to simplify testing
 // Note: The real component only renders ONE overlay at a time based on captureMode
@@ -30,7 +30,10 @@ vi.mock("./CaptureLassoOverlay", () => ({
 vi.mock("./CapturePolygonOverlay", () => ({
   CapturePolygonOverlay: ({ isActive, onCaptureComplete }: any) => (
     <div data-testid="polygon-overlay" data-active={isActive}>
-      <button onClick={onCaptureComplete} data-testid="complete-capture-polygon">
+      <button
+        onClick={onCaptureComplete}
+        data-testid="complete-capture-polygon"
+      >
         Complete
       </button>
     </div>
@@ -74,7 +77,9 @@ describe("CaptureToolButton", () => {
     const button = screen.getByTestId("capture-tool-button");
 
     // Initially, rectangle overlay should not be active
-    expect(screen.getByTestId("rectangle-overlay").dataset.active).toBe("false");
+    expect(screen.getByTestId("rectangle-overlay").dataset.active).toBe(
+      "false",
+    );
 
     // Click to activate
     fireEvent.click(button);
@@ -82,7 +87,9 @@ describe("CaptureToolButton", () => {
 
     // Click to deactivate
     fireEvent.click(button);
-    expect(screen.getByTestId("rectangle-overlay").dataset.active).toBe("false");
+    expect(screen.getByTestId("rectangle-overlay").dataset.active).toBe(
+      "false",
+    );
   });
 
   it("shows mode switcher when capture mode is active", () => {
@@ -164,7 +171,9 @@ describe("CaptureToolButton", () => {
     fireEvent.click(screen.getByTestId("complete-capture"));
 
     // Should be deactivated
-    expect(screen.getByTestId("rectangle-overlay").dataset.active).toBe("false");
+    expect(screen.getByTestId("rectangle-overlay").dataset.active).toBe(
+      "false",
+    );
   });
 
   it("applies active styles when capture mode is on", () => {

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 
-import { useCaptureOverlay } from "./useCaptureOverlay";
-
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+
+import { useCaptureOverlay } from "./useCaptureOverlay";
 
 describe("useCaptureOverlay", () => {
   let mockExcalidrawAPI: ExcalidrawImperativeAPI;
@@ -54,7 +54,9 @@ describe("useCaptureOverlay", () => {
       }),
     );
 
-    expect(mockExcalidrawAPI.setActiveTool).toHaveBeenCalledWith({ type: "hand" });
+    expect(mockExcalidrawAPI.setActiveTool).toHaveBeenCalledWith({
+      type: "hand",
+    });
   });
 
   it("restores previous tool when deactivated without completing", () => {
@@ -74,7 +76,9 @@ describe("useCaptureOverlay", () => {
     // Deactivate
     rerender({ isActive: false });
 
-    expect(mockExcalidrawAPI.setActiveTool).toHaveBeenCalledWith({ type: "selection" });
+    expect(mockExcalidrawAPI.setActiveTool).toHaveBeenCalledWith({
+      type: "selection",
+    });
   });
 
   it("startDrawing sets isDrawing to true and returns coords", () => {

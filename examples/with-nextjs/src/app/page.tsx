@@ -20,7 +20,7 @@ export default function Page() {
       <Script id="load-env-variables" strategy="beforeInteractive">
         {`window["EXCALIDRAW_ASSET_PATH"] = window.origin;`}
       </Script>
-      {/* @ts-expect-error - https://github.com/vercel/next.js/issues/42292 */}
+      {/* @ts-expect-error - Next.js issue 42292 */}
       <ExcalidrawWithClientOnly />
     </>
   );

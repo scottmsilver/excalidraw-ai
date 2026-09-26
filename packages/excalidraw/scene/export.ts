@@ -39,12 +39,14 @@ import { type Mutable } from "@excalidraw/common/utility-types";
 
 import { newTextElement } from "@excalidraw/element";
 
+import { getAutoContrastModes } from "@excalidraw/element/autoContrast";
+
 import type { Bounds } from "@excalidraw/common";
 
 import type {
-  ExcalidrawElement,
   ExcalidrawFrameLikeElement,
   ExcalidrawTextElement,
+  NonDeleted,
   NonDeletedExcalidrawElement,
   NonDeletedSceneElementsMap,
 } from "@excalidraw/element/types";
@@ -58,11 +60,16 @@ import { Fonts } from "../fonts";
 import { renderStaticScene } from "../renderer/staticScene";
 import { renderSceneToSvg } from "../renderer/staticSvgScene";
 
+import { CalloutAutoStyleController } from "./calloutAutoStyle";
+
 import type { RenderableElementsMap } from "./types";
 
 import type { AppState, BinaryFiles } from "../types";
 
-const truncateText = (element: ExcalidrawTextElement, maxWidth: number) => {
+const truncateText = (
+  element: NonDeleted<ExcalidrawTextElement>,
+  maxWidth: number,
+) => {
   if (element.width <= maxWidth) {
     return element;
   }
@@ -106,18 +113,19 @@ const addFrameLabelsAsTextElements = (
   const nextElements: NonDeletedExcalidrawElement[] = [];
   for (const element of elements) {
     if (isFrameLikeElement(element)) {
-      let textElement: Mutable<ExcalidrawTextElement> = newTextElement({
-        x: element.x,
-        y: element.y - FRAME_STYLE.nameOffsetY,
-        fontFamily: FONT_FAMILY.Helvetica,
-        fontSize: FRAME_STYLE.nameFontSize,
-        lineHeight:
-          FRAME_STYLE.nameLineHeight as ExcalidrawTextElement["lineHeight"],
-        strokeColor: opts.exportWithDarkMode
-          ? FRAME_STYLE.nameColorDarkTheme
-          : FRAME_STYLE.nameColorLightTheme,
-        text: getFrameLikeTitle(element),
-      });
+      let textElement: Mutable<NonDeleted<ExcalidrawTextElement>> =
+        newTextElement({
+          x: element.x,
+          y: element.y - FRAME_STYLE.nameOffsetY,
+          fontFamily: FONT_FAMILY.Helvetica,
+          fontSize: FRAME_STYLE.nameFontSize,
+          lineHeight:
+            FRAME_STYLE.nameLineHeight as ExcalidrawTextElement["lineHeight"],
+          strokeColor: opts.exportWithDarkMode
+            ? FRAME_STYLE.nameColorDarkTheme
+            : FRAME_STYLE.nameColorLightTheme,
+          text: getFrameLikeTitle(element),
+        });
       textElement.y -= textElement.height;
 
       textElement = truncateText(textElement, element.width);
@@ -149,15 +157,19 @@ const prepareElementsForRender = ({
   frameRendering,
   exportWithDarkMode,
 }: {
-  elements: readonly ExcalidrawElement[];
+  elements: readonly NonDeletedExcalidrawElement[];
   exportingFrame: ExcalidrawFrameLikeElement | null | undefined;
   frameRendering: AppState["frameRendering"];
   exportWithDarkMode: AppState["exportWithDarkMode"];
 }) => {
-  let nextElements: readonly ExcalidrawElement[];
+  let nextElements: readonly NonDeletedExcalidrawElement[];
 
   if (exportingFrame) {
-    nextElements = getElementsOverlappingFrame(elements, exportingFrame);
+    nextElements = getElementsOverlappingFrame(
+      elements,
+      exportingFrame,
+      arrayToMap(elements),
+    );
   } else if (frameRendering.enabled && frameRendering.name) {
     nextElements = addFrameLabelsAsTextElements(elements, {
       exportWithDarkMode,
@@ -182,7 +194,7 @@ export const exportToCanvas = async (
     exportBackground: boolean;
     exportPadding?: number;
     viewBackgroundColor: string;
-    exportingFrame?: ExcalidrawFrameLikeElement | null;
+    exportingFrame?: NonDeleted<ExcalidrawFrameLikeElement> | null;
   },
   createCanvas: (
     width: number,
@@ -215,7 +227,9 @@ export const exportToCanvas = async (
     exportingFrame,
     exportWithDarkMode: appState.exportWithDarkMode,
     frameRendering,
-  });
+  }).map((element) =>
+    getAutoContrastModes(element) ? { ...element } : element,
+  );
 
   if (exportingFrame) {
     exportPadding = 0;
@@ -237,6 +251,19 @@ export const exportToCanvas = async (
     ),
     files,
   });
+
+  new CalloutAutoStyleController().resolve(
+    elementsForRender,
+    {
+      ...appState,
+      frameRendering,
+      theme: appState.exportWithDarkMode ? THEME.DARK : THEME.LIGHT,
+      viewBackgroundColor,
+    },
+    imageCache,
+    canvas.ownerDocument,
+    true,
+  );
 
   renderStaticScene({
     canvas,
@@ -299,7 +326,7 @@ export const exportToSvg = async (
      * if true, all embeddables passed in will be rendered when possible.
      */
     renderEmbeddables?: boolean;
-    exportingFrame?: ExcalidrawFrameLikeElement | null;
+    exportingFrame?: NonDeleted<ExcalidrawFrameLikeElement> | null;
     skipInliningFonts?: true;
     reuseImages?: boolean;
   },
@@ -324,7 +351,9 @@ export const exportToSvg = async (
     exportingFrame,
     exportWithDarkMode,
     frameRendering,
-  });
+  }).map((element) =>
+    getAutoContrastModes(element) ? { ...element } : element,
+  );
 
   if (exportingFrame) {
     exportPadding = 0;
@@ -343,6 +372,32 @@ export const exportToSvg = async (
   // ---------------------------------------------------------------------------
 
   const svgRoot = document.createElementNS(SVG_NS, "svg");
+
+  if (elementsForRender.some((element) => getAutoContrastModes(element))) {
+    const { imageCache } = await updateImageCache({
+      imageCache: new Map(),
+      fileIds: getInitializedImageElements(elementsForRender).map(
+        (element) => element.fileId,
+      ),
+      files: files || {},
+    });
+    new CalloutAutoStyleController().resolve(
+      elementsForRender,
+      {
+        ...getDefaultAppState(),
+        ...appState,
+        frameRendering,
+        width,
+        height,
+        offsetTop: 0,
+        offsetLeft: 0,
+        theme: exportWithDarkMode ? THEME.DARK : THEME.LIGHT,
+      },
+      imageCache,
+      svgRoot.ownerDocument,
+      true,
+    );
+  }
 
   svgRoot.setAttribute("version", "1.1");
   svgRoot.setAttribute("xmlns", SVG_NS);
@@ -455,9 +510,7 @@ export const exportToSvg = async (
     rect.setAttribute("height", `${height}`);
     rect.setAttribute(
       "fill",
-      exportWithDarkMode
-        ? applyDarkModeFilter(viewBackgroundColor)
-        : viewBackgroundColor,
+      applyDarkModeFilter(viewBackgroundColor, exportWithDarkMode),
     );
     svgRoot.appendChild(rect);
   }

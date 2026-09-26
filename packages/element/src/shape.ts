@@ -1,5 +1,6 @@
 import { simplify } from "points-on-curve";
-import { getStroke } from "perfect-freehand";
+import { getStroke, getStrokePoints } from "perfect-freehand";
+import { LaserPointer } from "@excalidraw/laser-pointer";
 
 import {
   type GeometricShape,
@@ -24,6 +25,7 @@ import {
   COLOR_PALETTE,
   LINE_POLYGON_POINT_MERGE_DISTANCE,
   applyDarkModeFilter,
+  DEFAULT_STROKE_STREAMLINE,
 } from "@excalidraw/common";
 
 import { RoughGenerator } from "roughjs/bin/generator";
@@ -57,27 +59,30 @@ import { headingForPointIsHorizontal } from "./heading";
 
 import { canChangeRoundness } from "./comparisons";
 import {
-  getArrowheadPoints,
-  getCenterForBounds,
+  elementCenterPoint,
+  getArrowheadPoints as getLinearArrowheadPoints,
   getDiamondPoints,
   getElementAbsoluteCoords,
 } from "./bounds";
 import { shouldTestInside } from "./collision";
 
+import { getCalloutTailPoints, getCalloutTailArrowheadPoints } from "./callout";
+import { calloutFillColor } from "./calloutAppearance";
+import {
+  getAutoContrastResolved,
+  getAutoContrastFillOpacity,
+  hasAutoContrastFill,
+} from "./autoContrast";
+
 import type {
   ExcalidrawElement,
-  NonDeletedExcalidrawElement,
   ExcalidrawSelectionElement,
   ExcalidrawLinearElement,
-  Arrowhead,
   ExcalidrawFreeDrawElement,
   ElementsMap,
   ExcalidrawLineElement,
-  ExcalidrawCalloutElement,
+  Arrowhead,
 } from "./types";
-
-import { getCalloutTailPoints, getCalloutTailArrowheadPoints } from "./callout";
-import { isCalloutElement } from "./typeChecks";
 
 import type { Drawable, Options } from "roughjs/bin/core";
 import type { Point as RoughPoint } from "roughjs/bin/geometry";
@@ -194,6 +199,25 @@ function adjustRoughness(element: ExcalidrawElement): number {
   return Math.min(roughness / (maxSize < 10 ? 3 : 2), 2.5);
 }
 
+export const getAutoContrastHaloShape = (
+  element: ExcalidrawElement,
+  shape: Drawable,
+): Drawable | undefined => {
+  const halo = getAutoContrastResolved(element)?.halo;
+  return halo
+    ? {
+        ...shape,
+        options: {
+          ...shape.options,
+          stroke: halo,
+          strokeWidth: shape.options.strokeWidth + 3,
+          fill: undefined,
+        },
+        sets: shape.sets.filter((set) => set.type === "path"),
+      }
+    : undefined;
+};
+
 export const generateRoughOptions = (
   element: ExcalidrawElement,
   continuousPath = false,
@@ -222,9 +246,9 @@ export const generateRoughOptions = (
     fillWeight: element.strokeWidth / 2,
     hachureGap: element.strokeWidth * 4,
     roughness: adjustRoughness(element),
-    stroke: isDarkMode
-      ? applyDarkModeFilter(element.strokeColor)
-      : element.strokeColor,
+    stroke:
+      getAutoContrastResolved(element)?.foreground ??
+      applyDarkModeFilter(element.strokeColor, isDarkMode),
     preserveVertices:
       continuousPath || element.roughness < ROUGHNESS.cartoonist,
   };
@@ -239,11 +263,25 @@ export const generateRoughOptions = (
       options.fillStyle = element.fillStyle;
       options.fill = isTransparent(element.backgroundColor)
         ? undefined
-        : isDarkMode
-        ? applyDarkModeFilter(element.backgroundColor)
-        : element.backgroundColor;
+        : applyDarkModeFilter(element.backgroundColor, isDarkMode);
       if (element.type === "ellipse") {
         options.curveFitting = 1;
+      }
+      if (
+        hasAutoContrastFill(element) &&
+        (getAutoContrastResolved(element) ||
+          element.fillOpacity !== undefined ||
+          (element.type === "callout" &&
+            element.calloutBackgroundOpacity !== undefined))
+      ) {
+        const resolved = getAutoContrastResolved(element);
+        options.fill = calloutFillColor(
+          resolved?.background ?? options.fill ?? "transparent",
+          resolved?.backgroundOpacity ?? getAutoContrastFillOpacity(element),
+        );
+        if (resolved) {
+          options.fillStyle = "solid";
+        }
       }
       return options;
     }
@@ -254,9 +292,7 @@ export const generateRoughOptions = (
         options.fill =
           element.backgroundColor === "transparent"
             ? undefined
-            : isDarkMode
-            ? applyDarkModeFilter(element.backgroundColor)
-            : element.backgroundColor;
+            : applyDarkModeFilter(element.backgroundColor, isDarkMode);
       }
       return options;
     }
@@ -269,7 +305,7 @@ export const generateRoughOptions = (
 };
 
 const modifyIframeLikeForRoughOptions = (
-  element: NonDeletedExcalidrawElement,
+  element: ExcalidrawElement,
   isExporting: boolean,
   embedsValidationStatus: EmbedsValidationStatus | null,
 ) => {
@@ -301,6 +337,82 @@ const modifyIframeLikeForRoughOptions = (
   return element;
 };
 
+const generateArrowheadCardinalityOne = (
+  generator: RoughGenerator,
+  arrowheadPoints: number[] | null,
+  lineOptions: Options,
+) => {
+  if (arrowheadPoints === null) {
+    return [];
+  }
+
+  const [, , x3, y3, x4, y4] = arrowheadPoints;
+
+  return [generator.line(x3, y3, x4, y4, lineOptions)];
+};
+
+const generateArrowheadLinesToTip = (
+  generator: RoughGenerator,
+  arrowheadPoints: number[] | null,
+  lineOptions: Options,
+) => {
+  if (arrowheadPoints === null) {
+    return [];
+  }
+
+  const [x2, y2, x3, y3, x4, y4] = arrowheadPoints;
+
+  return [
+    generator.line(x3, y3, x2, y2, lineOptions),
+    generator.line(x4, y4, x2, y2, lineOptions),
+  ];
+};
+
+const getArrowheadLineOptions = (
+  element: ExcalidrawLinearElement,
+  options: Options,
+) => {
+  const lineOptions = { ...options };
+
+  if (element.strokeStyle === "dotted") {
+    // for dotted arrows caps, reduce gap to make it more legible
+    const dash = getDashArrayDotted(element.strokeWidth - 1);
+    lineOptions.strokeLineDash = [dash[0], dash[1] - 1];
+  } else {
+    // for solid/dashed, keep solid arrow cap
+    delete lineOptions.strokeLineDash;
+  }
+  lineOptions.roughness = Math.min(1, lineOptions.roughness || 0);
+
+  return lineOptions;
+};
+
+const generateArrowheadOutlineCircle = (
+  generator: RoughGenerator,
+  options: Options,
+  strokeColor: string,
+  arrowheadPoints: number[] | null,
+  fill: string,
+  diameterScale = 1,
+) => {
+  if (arrowheadPoints === null) {
+    return [];
+  }
+
+  const [x, y, diameter] = arrowheadPoints;
+  const circleOptions = {
+    ...options,
+    fill,
+    fillStyle: "solid" as const,
+    stroke: strokeColor,
+    roughness: Math.min(0.5, options.roughness || 0),
+  };
+
+  delete circleOptions.strokeLineDash;
+
+  return [generator.circle(x, y, diameter * diameterScale, circleOptions)];
+};
+
 const getArrowheadShapes = (
   element: ExcalidrawLinearElement,
   shape: Drawable[],
@@ -310,64 +422,56 @@ const getArrowheadShapes = (
   options: Options,
   canvasBackgroundColor: string,
   isDarkMode: boolean,
+  getArrowheadPoints: typeof getLinearArrowheadPoints = getLinearArrowheadPoints,
 ) => {
-  const arrowheadPoints = getArrowheadPoints(
-    element,
-    shape,
-    position,
-    arrowhead,
-  );
-
-  if (arrowheadPoints === null) {
+  if (arrowhead === null) {
     return [];
   }
 
-  const generateCrowfootOne = (
-    arrowheadPoints: number[] | null,
-    options: Options,
-  ) => {
-    if (arrowheadPoints === null) {
-      return [];
-    }
-
-    const [, , x3, y3, x4, y4] = arrowheadPoints;
-
-    return [generator.line(x3, y3, x4, y4, options)];
-  };
-
-  const strokeColor = isDarkMode
-    ? applyDarkModeFilter(element.strokeColor)
-    : element.strokeColor;
+  const strokeColor =
+    options.stroke ?? applyDarkModeFilter(element.strokeColor, isDarkMode);
+  const backgroundFillColor = applyDarkModeFilter(
+    canvasBackgroundColor,
+    isDarkMode,
+  );
+  const cardinalityOneOrManyOffset = -0.25;
+  const cardinalityZeroCircleScale = 0.8;
 
   switch (arrowhead) {
-    case "dot":
     case "circle":
     case "circle_outline": {
-      const [x, y, diameter] = arrowheadPoints;
-
-      // always use solid stroke for arrowhead
-      delete options.strokeLineDash;
-
-      return [
-        generator.circle(x, y, diameter, {
-          ...options,
-          fill:
-            arrowhead === "circle_outline"
-              ? canvasBackgroundColor
-              : strokeColor,
-
-          fillStyle: "solid",
-          stroke: strokeColor,
-          roughness: Math.min(0.5, options.roughness || 0),
-        }),
-      ];
+      return generateArrowheadOutlineCircle(
+        generator,
+        options,
+        strokeColor,
+        getArrowheadPoints(element, shape, position, arrowhead),
+        arrowhead === "circle_outline" ? backgroundFillColor : strokeColor,
+      );
     }
     case "triangle":
     case "triangle_outline": {
+      const arrowheadPoints = getArrowheadPoints(
+        element,
+        shape,
+        position,
+        arrowhead,
+      );
+
+      if (arrowheadPoints === null) {
+        return [];
+      }
+
       const [x, y, x2, y2, x3, y3] = arrowheadPoints;
+      const triangleOptions = {
+        ...options,
+        fill:
+          arrowhead === "triangle_outline" ? backgroundFillColor : strokeColor,
+        fillStyle: "solid" as const,
+        roughness: Math.min(1, options.roughness || 0),
+      };
 
       // always use solid stroke for arrowhead
-      delete options.strokeLineDash;
+      delete triangleOptions.strokeLineDash;
 
       return [
         generator.polygon(
@@ -377,24 +481,34 @@ const getArrowheadShapes = (
             [x3, y3],
             [x, y],
           ],
-          {
-            ...options,
-            fill:
-              arrowhead === "triangle_outline"
-                ? canvasBackgroundColor
-                : strokeColor,
-            fillStyle: "solid",
-            roughness: Math.min(1, options.roughness || 0),
-          },
+          triangleOptions,
         ),
       ];
     }
     case "diamond":
     case "diamond_outline": {
+      const arrowheadPoints = getArrowheadPoints(
+        element,
+        shape,
+        position,
+        arrowhead,
+      );
+
+      if (arrowheadPoints === null) {
+        return [];
+      }
+
       const [x, y, x2, y2, x3, y3, x4, y4] = arrowheadPoints;
+      const diamondOptions = {
+        ...options,
+        fill:
+          arrowhead === "diamond_outline" ? backgroundFillColor : strokeColor,
+        fillStyle: "solid" as const,
+        roughness: Math.min(1, options.roughness || 0),
+      };
 
       // always use solid stroke for arrowhead
-      delete options.strokeLineDash;
+      delete diamondOptions.strokeLineDash;
 
       return [
         generator.polygon(
@@ -405,53 +519,117 @@ const getArrowheadShapes = (
             [x4, y4],
             [x, y],
           ],
-          {
-            ...options,
-            fill:
-              arrowhead === "diamond_outline"
-                ? canvasBackgroundColor
-                : strokeColor,
-            fillStyle: "solid",
-            roughness: Math.min(1, options.roughness || 0),
-          },
+          diamondOptions,
         ),
       ];
     }
-    case "crowfoot_one":
-      return generateCrowfootOne(arrowheadPoints, options);
+    case "cardinality_one":
+      return generateArrowheadCardinalityOne(
+        generator,
+        getArrowheadPoints(element, shape, position, arrowhead),
+        getArrowheadLineOptions(element, options),
+      );
+    case "cardinality_many":
+      return generateArrowheadLinesToTip(
+        generator,
+        getArrowheadPoints(element, shape, position, arrowhead),
+        getArrowheadLineOptions(element, options),
+      );
+    case "cardinality_one_or_many": {
+      const lineOptions = getArrowheadLineOptions(element, options);
+
+      return [
+        ...generateArrowheadLinesToTip(
+          generator,
+          getArrowheadPoints(element, shape, position, "cardinality_many"),
+          lineOptions,
+        ),
+        ...generateArrowheadCardinalityOne(
+          generator,
+          getArrowheadPoints(
+            element,
+            shape,
+            position,
+            "cardinality_one",
+            cardinalityOneOrManyOffset,
+          ),
+          lineOptions,
+        ),
+      ];
+    }
+    case "cardinality_exactly_one": {
+      const lineOptions = getArrowheadLineOptions(element, options);
+
+      return [
+        ...generateArrowheadCardinalityOne(
+          generator,
+          getArrowheadPoints(element, shape, position, "cardinality_one", -0.5),
+          lineOptions,
+        ),
+        ...generateArrowheadCardinalityOne(
+          generator,
+          getArrowheadPoints(element, shape, position, "cardinality_one"),
+          lineOptions,
+        ),
+      ];
+    }
+    case "cardinality_zero_or_one": {
+      const lineOptions = getArrowheadLineOptions(element, options);
+
+      return [
+        ...generateArrowheadOutlineCircle(
+          generator,
+          options,
+          strokeColor,
+          getArrowheadPoints(element, shape, position, "circle_outline", 1.5),
+          backgroundFillColor,
+          cardinalityZeroCircleScale,
+        ),
+        ...generateArrowheadCardinalityOne(
+          generator,
+          getArrowheadPoints(element, shape, position, "cardinality_one", -0.5),
+          lineOptions,
+        ),
+      ];
+    }
+    case "cardinality_zero_or_many": {
+      const lineOptions = getArrowheadLineOptions(element, options);
+
+      return [
+        ...generateArrowheadLinesToTip(
+          generator,
+          getArrowheadPoints(element, shape, position, "cardinality_many"),
+          lineOptions,
+        ),
+        ...generateArrowheadOutlineCircle(
+          generator,
+          options,
+          strokeColor,
+          getArrowheadPoints(element, shape, position, "circle_outline", 1.5),
+          backgroundFillColor,
+          cardinalityZeroCircleScale,
+        ),
+      ];
+    }
     case "bar":
     case "arrow":
-    case "crowfoot_many":
-    case "crowfoot_one_or_many":
     default: {
-      const [x2, y2, x3, y3, x4, y4] = arrowheadPoints;
-
-      if (element.strokeStyle === "dotted") {
-        // for dotted arrows caps, reduce gap to make it more legible
-        const dash = getDashArrayDotted(element.strokeWidth - 1);
-        options.strokeLineDash = [dash[0], dash[1] - 1];
-      } else {
-        // for solid/dashed, keep solid arrow cap
-        delete options.strokeLineDash;
-      }
-      options.roughness = Math.min(1, options.roughness || 0);
-      return [
-        generator.line(x3, y3, x2, y2, options),
-        generator.line(x4, y4, x2, y2, options),
-        ...(arrowhead === "crowfoot_one_or_many"
-          ? generateCrowfootOne(
-              getArrowheadPoints(element, shape, position, "crowfoot_one"),
-              options,
-            )
-          : []),
-      ];
+      return generateArrowheadLinesToTip(
+        generator,
+        getArrowheadPoints(element, shape, position, arrowhead),
+        getArrowheadLineOptions(element, options),
+      );
     }
   }
 };
 
 export const generateLinearCollisionShape = (
   element: ExcalidrawLinearElement | ExcalidrawFreeDrawElement,
-) => {
+  elementsMap: ElementsMap,
+): {
+  op: string;
+  data: number[];
+}[] => {
   const generator = new RoughGenerator();
   const options: Options = {
     seed: element.seed,
@@ -460,20 +638,7 @@ export const generateLinearCollisionShape = (
     roughness: 0,
     preserveVertices: true,
   };
-  const center = getCenterForBounds(
-    // Need a non-rotated center point
-    element.points.reduce(
-      (acc, point) => {
-        return [
-          Math.min(element.x + point[0], acc[0]),
-          Math.min(element.y + point[1], acc[1]),
-          Math.max(element.x + point[0], acc[2]),
-          Math.max(element.y + point[1], acc[3]),
-        ];
-      },
-      [Infinity, Infinity, -Infinity, -Infinity],
-    ),
-  );
+  const center = elementCenterPoint(element, elementsMap);
 
   switch (element.type) {
     case "line":
@@ -633,7 +798,7 @@ export const generateLinearCollisionShape = (
  * @private
  */
 const _generateElementShape = (
-  element: Exclude<NonDeletedExcalidrawElement, ExcalidrawSelectionElement>,
+  element: Exclude<ExcalidrawElement, ExcalidrawSelectionElement>,
   generator: RoughGenerator,
   {
     isExporting,
@@ -836,7 +1001,10 @@ const _generateElementShape = (
           shape.push(...shapes);
         }
       }
-      return shape;
+      const halos = shape
+        .map((drawable) => getAutoContrastHaloShape(element, drawable))
+        .filter((drawable): drawable is Drawable => !!drawable);
+      return [...halos, ...shape];
     }
     case "freedraw": {
       // oredered in terms of z-index [background, stroke]
@@ -874,6 +1042,7 @@ const _generateElementShape = (
     case "callout": {
       const shapes: ElementShapes[typeof element.type] = [];
       const options = generateRoughOptions(element, false, isDarkMode);
+      const resolved = getAutoContrastResolved(element);
 
       // Generate rectangle body (similar to rectangle case)
       if (element.roundness) {
@@ -887,18 +1056,12 @@ const _generateElementShape = (
             } Q ${w} ${h}, ${w - r} ${h} L ${r} ${h} Q 0 ${h}, 0 ${
               h - r
             } L 0 ${r} Q 0 0, ${r} 0`,
-            generateRoughOptions(element, true, isDarkMode),
+            { ...options, preserveVertices: true },
           ),
         );
       } else {
         shapes.push(
-          generator.rectangle(
-            0,
-            0,
-            element.width,
-            element.height,
-            options,
-          ),
+          generator.rectangle(0, 0, element.width, element.height, options),
         );
       }
 
@@ -914,112 +1077,45 @@ const _generateElementShape = (
         }),
       );
 
-      // Generate arrowhead at tail tip using proper arrowhead system
-      const arrowheadPoints = getCalloutTailArrowheadPoints(element);
-      if (arrowheadPoints && element.tailArrowhead) {
-        const arrowhead = element.tailArrowhead;
-        const strokeColor = isDarkMode
-          ? applyDarkModeFilter(element.strokeColor)
-          : element.strokeColor;
-
-        // Delete stroke line dash for solid arrowhead
-        const arrowheadOptions = { ...options };
-        delete arrowheadOptions.strokeLineDash;
-
-        switch (arrowhead) {
-          case "dot":
-          case "circle":
-          case "circle_outline": {
-            const [x, y, diameter] = arrowheadPoints;
-            shapes.push(
-              generator.circle(x, y, diameter, {
-                ...arrowheadOptions,
-                fill:
-                  arrowhead === "circle_outline"
-                    ? canvasBackgroundColor
-                    : strokeColor,
-                fillStyle: "solid",
-                stroke: strokeColor,
-                roughness: Math.min(0.5, arrowheadOptions.roughness || 0),
-              }),
-            );
-            break;
-          }
-          case "triangle":
-          case "triangle_outline": {
-            const [x, y, x2, y2, x3, y3] = arrowheadPoints;
-            shapes.push(
-              generator.polygon(
-                [
-                  [x, y],
-                  [x2, y2],
-                  [x3, y3],
-                  [x, y],
-                ],
-                {
-                  ...arrowheadOptions,
-                  fill:
-                    arrowhead === "triangle_outline"
-                      ? canvasBackgroundColor
-                      : strokeColor,
-                  fillStyle: "solid",
-                  roughness: Math.min(1, arrowheadOptions.roughness || 0),
-                },
-              ),
-            );
-            break;
-          }
-          case "diamond":
-          case "diamond_outline": {
-            const [x, y, x2, y2, x3, y3, x4, y4] = arrowheadPoints;
-            shapes.push(
-              generator.polygon(
-                [
-                  [x, y],
-                  [x2, y2],
-                  [x3, y3],
-                  [x4, y4],
-                  [x, y],
-                ],
-                {
-                  ...arrowheadOptions,
-                  fill:
-                    arrowhead === "diamond_outline"
-                      ? canvasBackgroundColor
-                      : strokeColor,
-                  fillStyle: "solid",
-                  roughness: Math.min(1, arrowheadOptions.roughness || 0),
-                },
-              ),
-            );
-            break;
-          }
-          case "crowfoot_one": {
-            const [, , x3, y3, x4, y4] = arrowheadPoints;
-            shapes.push(generator.line(x3, y3, x4, y4, arrowheadOptions));
-            break;
-          }
-          case "bar":
-          case "arrow":
-          case "crowfoot_many":
-          case "crowfoot_one_or_many":
-          default: {
-            const [x2, y2, x3, y3, x4, y4] = arrowheadPoints;
-            arrowheadOptions.roughness = Math.min(
-              1,
-              arrowheadOptions.roughness || 0,
-            );
-            shapes.push(generator.line(x3, y3, x2, y2, arrowheadOptions));
-            shapes.push(generator.line(x4, y4, x2, y2, arrowheadOptions));
-            if (arrowhead === "crowfoot_one_or_many") {
-              // Add the "one" part of crowfoot_one_or_many
-              // This would need crowfoot_one points - for simplicity, skip for now
-            }
-            break;
-          }
-        }
+      // Reuse the upstream arrowhead renderer, with the exact tail tangent.
+      if (element.tailArrowhead) {
+        const tailElement: ExcalidrawLinearElement = {
+          ...element,
+          type: "arrow",
+          points: [controlPoint, tipPoint],
+          startBinding: null,
+          endBinding: null,
+          startArrowhead: null,
+          endArrowhead: element.tailArrowhead,
+        };
+        shapes.push(
+          ...getArrowheadShapes(
+            tailElement,
+            [],
+            "end",
+            element.tailArrowhead,
+            generator,
+            options,
+            canvasBackgroundColor,
+            isDarkMode,
+            (_element, _shape, _position, arrowhead, offset) =>
+              getCalloutTailArrowheadPoints(element, arrowhead, offset),
+          ),
+        );
       }
-
+      if (resolved?.halo) {
+        const haloShapes = shapes.map((shape) => ({
+          ...shape,
+          options: {
+            ...shape.options,
+            stroke: resolved.halo!,
+            strokeWidth: shape.options.strokeWidth + 3,
+            fill: undefined,
+          },
+          sets: shape.sets.filter((set) => set.type === "path"),
+        }));
+        return [...haloShapes, ...shapes];
+      }
       return shapes;
     }
     default: {
@@ -1207,26 +1303,106 @@ const getFreeDrawSvgPath = (element: ExcalidrawFreeDrawElement) => {
   ) as SVGPathString;
 };
 
-export const getFreedrawOutlinePoints = (
+/**
+ * Freedraw stroke geometry tuning constants.
+ *
+ * These factors are not derived analytically — they were tuned empirically by
+ * visually comparing rendered strokes until they matched the desired feel.
+ * Treat them as magic numbers backed by visual verification.
+ */
+const VARIABLE_WIDTH_FREEDRAW = {
+  /** Stroke size relative to `strokeWidth` for pressure-sensitive strokes. */
+  SIZE_FACTOR: 4.25,
+  THINNING: 0.6,
+  SMOOTHING: 0.5,
+} as const;
+
+const CONSTANT_WIDTH_FREEDRAW = {
+  /** Stroke size relative to `strokeWidth` for uniform (laser) strokes. */
+  SIZE_FACTOR: 1.4,
+} as const;
+
+const getFreedrawStreamline = (element: ExcalidrawFreeDrawElement) =>
+  element.strokeOptions?.streamline ?? DEFAULT_STROKE_STREAMLINE;
+
+/**
+ * Pressure-sensitive (variable width) freedraw outline, rendered with
+ * perfect-freehand. This is the original Excalidraw freedraw look.
+ */
+const getVariableWidthFreedrawOutline = (
   element: ExcalidrawFreeDrawElement,
-) => {
+): [number, number][] => {
   // If input points are empty (should they ever be?) return a dot
   const inputPoints = element.simulatePressure
     ? element.points
     : element.points.length
-    ? element.points.map(([x, y], i) => [x, y, element.pressures[i]])
+    ? element.points.map(
+        ([x, y], i) => [x, y, element.pressures[i]] as [number, number, number],
+      )
     : [[0, 0, 0.5]];
 
   return getStroke(inputPoints as number[][], {
     simulatePressure: element.simulatePressure,
-    size: element.strokeWidth * 4.25,
-    thinning: 0.6,
-    smoothing: 0.5,
-    streamline: 0.5,
+    size: element.strokeWidth * VARIABLE_WIDTH_FREEDRAW.SIZE_FACTOR,
+    thinning: VARIABLE_WIDTH_FREEDRAW.THINNING,
+    smoothing: VARIABLE_WIDTH_FREEDRAW.SMOOTHING,
+    streamline: getFreedrawStreamline(element),
     easing: (t) => Math.sin((t * Math.PI) / 2), // https://easings.net/#easeOutSine
     last: true,
   }) as [number, number][];
 };
+
+const createLaserPointer = (element: ExcalidrawFreeDrawElement) =>
+  new LaserPointer({
+    size: element.strokeWidth * CONSTANT_WIDTH_FREEDRAW.SIZE_FACTOR,
+    streamline: getFreedrawStreamline(element),
+    simplify: 0,
+    sizeMapping: (details) => Math.max(0.1, details.pressure),
+  });
+
+/**
+ * Uniform (constant width) freedraw outline, rendered with the laser-pointer
+ * geometry. Pressure is pinned to 1 so the stroke keeps a constant width.
+ */
+const getConstantWidthFreedrawOutline = (
+  element: ExcalidrawFreeDrawElement,
+): [number, number][] => {
+  const laserPointer = createLaserPointer(element);
+  element.points.map(([x, y]) => laserPointer.addPoint([x, y, 1]));
+
+  return laserPointer
+    .getStrokeOutline()
+    .map(([x, y]) => [x, y] as [number, number]);
+};
+
+export const getFreedrawOutlinePoints = (
+  element: ExcalidrawFreeDrawElement,
+): [number, number][] => {
+  // Unknown/absent variability falls back to the original variable rendering.
+  return element.strokeOptions?.variability === "constant"
+    ? getConstantWidthFreedrawOutline(element)
+    : getVariableWidthFreedrawOutline(element);
+};
+
+/**
+ * The streamline-smoothed centerline the freedraw stroke is rendered
+ * around, in element-local coordinates. Boundary-sensitive consumers (e.g.
+ * bucket fill) should use this instead of `element.points`: raw input
+ * points can sit 20px+ apart and the rendered stroke is smoothed between
+ * them, so raw chords visibly deviate from what's on screen.
+ *
+ * Constant-width ("laser geometry") strokes technically smooth via
+ * `LaserPointer` instead; the perfect-freehand centerline with the same
+ * `streamline` is a close approximation the stroke width hides.
+ */
+export const getFreedrawStrokeCenterPoints = (
+  element: ExcalidrawFreeDrawElement,
+): [number, number][] =>
+  getStrokePoints(element.points as unknown as number[][], {
+    size: element.strokeWidth * VARIABLE_WIDTH_FREEDRAW.SIZE_FACTOR,
+    streamline: getFreedrawStreamline(element),
+    last: true,
+  }).map((strokePoint) => strokePoint.point as [number, number]);
 
 const med = (A: number[], B: number[]) => {
   return [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2];

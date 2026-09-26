@@ -1,4 +1,3 @@
-import oc from "open-color";
 import tinycolor from "tinycolor2";
 
 import { clamp } from "@excalidraw/math";
@@ -6,17 +5,16 @@ import { degreesToRadians } from "@excalidraw/math";
 
 import type { Degrees } from "@excalidraw/math";
 
-import type { Merge } from "./utility-types";
-
-export { tinycolor };
+// ---------------------------------------------------------------------------
+// Dark mode color transformation
+// ---------------------------------------------------------------------------
 
 // Browser-only cache to avoid memory leaks on server
 const DARK_MODE_COLORS_CACHE: Map<string, string> | null =
   typeof window !== "undefined" ? new Map() : null;
 
-// ---------------------------------------------------------------------------
-// Dark mode color transformation
-// ---------------------------------------------------------------------------
+const DARK_MODE_FILTER_INVERT_PERCENT = 93;
+const DARK_MODE_FILTER_HUE_ROTATE_DEGREES = 180 as Degrees;
 
 function cssHueRotate(
   red: number,
@@ -85,7 +83,11 @@ const cssInvert = (
   return { r: invertedR, g: invertedG, b: invertedB };
 };
 
-export const applyDarkModeFilter = (color: string): string => {
+export const applyDarkModeFilter = (color: string, enable = true): string => {
+  if (!enable) {
+    return color;
+  }
+
   const cached = DARK_MODE_COLORS_CACHE?.get(color);
   if (cached) {
     return cached;
@@ -97,12 +99,17 @@ export const applyDarkModeFilter = (color: string): string => {
   // order of operations matters
   // (corresponds to "filter: invert(invertPercent) hue-rotate(hueDegrees)" in css)
   const rgb = tc.toRgb();
-  const inverted = cssInvert(rgb.r, rgb.g, rgb.b, 93);
+  const inverted = cssInvert(
+    rgb.r,
+    rgb.g,
+    rgb.b,
+    DARK_MODE_FILTER_INVERT_PERCENT,
+  );
   const rotated = cssHueRotate(
     inverted.r,
     inverted.g,
     inverted.b,
-    180 as Degrees,
+    DARK_MODE_FILTER_HUE_ROTATE_DEGREES,
   );
 
   const result = rgbToHex(rotated.r, rotated.g, rotated.b, alpha);
@@ -114,9 +121,47 @@ export const applyDarkModeFilter = (color: string): string => {
   return result;
 };
 
-// ---------------------------------------------------------------------------
+const _reverseDarkModeInvert = (
+  r: number,
+  g: number,
+  b: number,
+): { r: number; g: number; b: number } => {
+  const p = DARK_MODE_FILTER_INVERT_PERCENT / 100;
+  const denominator = 1 - 2 * p;
+  const restore = (color: number) =>
+    Math.round(clamp((color - 255 * p) / denominator, 0, 255));
 
-export const COLOR_OUTLINE_CONTRAST_THRESHOLD = 240;
+  return {
+    r: restore(r),
+    g: restore(g),
+    b: restore(b),
+  };
+};
+
+export const removeDarkModeFilter = (color: string): string => {
+  const tc = tinycolor(color);
+  const alpha = tc.getAlpha();
+  const rgb = tc.toRgb();
+
+  // 180deg hue rotation is its own inverse, so undo it before the inversion.
+  const rotatedBack = cssHueRotate(
+    rgb.r,
+    rgb.g,
+    rgb.b,
+    DARK_MODE_FILTER_HUE_ROTATE_DEGREES,
+  );
+  const restored = _reverseDarkModeInvert(
+    rotatedBack.r,
+    rotatedBack.g,
+    rotatedBack.b,
+  );
+
+  return rgbToHex(restored.r, restored.g, restored.b, alpha);
+};
+
+// ---------------------------------------------------------------------------
+// Color palette
+// ---------------------------------------------------------------------------
 
 // FIXME can't put to utils.ts rn because of circular dependency
 const pick = <R extends Record<string, any>, K extends readonly (keyof R)[]>(
@@ -131,15 +176,7 @@ const pick = <R extends Record<string, any>, K extends readonly (keyof R)[]>(
   }, {} as Pick<R, K[number]>) as Pick<R, K[number]>;
 };
 
-export type ColorPickerColor =
-  | Exclude<keyof oc, "indigo" | "lime">
-  | "transparent"
-  | "bronze";
 export type ColorTuple = readonly [string, string, string, string, string];
-export type ColorPalette = Merge<
-  Record<ColorPickerColor, ColorTuple>,
-  { black: "#1e1e1e"; white: "#ffffff"; transparent: "transparent" }
->;
 
 // used general type instead of specific type (ColorPalette) to support custom colors
 export type ColorPaletteCustom = { [key: string]: ColorTuple | string };
@@ -152,38 +189,30 @@ export const DEFAULT_CHART_COLOR_INDEX = 4;
 
 export const DEFAULT_ELEMENT_STROKE_COLOR_INDEX = 4;
 export const DEFAULT_ELEMENT_BACKGROUND_COLOR_INDEX = 1;
-export const ELEMENTS_PALETTE_SHADE_INDEXES = [0, 2, 4, 6, 8] as const;
-export const CANVAS_PALETTE_SHADE_INDEXES = [0, 1, 2, 3, 4] as const;
-
-export const getSpecificColorShades = (
-  color: Exclude<
-    ColorPickerColor,
-    "transparent" | "white" | "black" | "bronze"
-  >,
-  indexArr: Readonly<ColorShadesIndexes>,
-) => {
-  return indexArr.map((index) => oc[color][index]) as any as ColorTuple;
-};
 
 export const COLOR_PALETTE = {
   transparent: "transparent",
   black: "#1e1e1e",
   white: "#ffffff",
-  // open-colors
-  gray: getSpecificColorShades("gray", ELEMENTS_PALETTE_SHADE_INDEXES),
-  red: getSpecificColorShades("red", ELEMENTS_PALETTE_SHADE_INDEXES),
-  pink: getSpecificColorShades("pink", ELEMENTS_PALETTE_SHADE_INDEXES),
-  grape: getSpecificColorShades("grape", ELEMENTS_PALETTE_SHADE_INDEXES),
-  violet: getSpecificColorShades("violet", ELEMENTS_PALETTE_SHADE_INDEXES),
-  blue: getSpecificColorShades("blue", ELEMENTS_PALETTE_SHADE_INDEXES),
-  cyan: getSpecificColorShades("cyan", ELEMENTS_PALETTE_SHADE_INDEXES),
-  teal: getSpecificColorShades("teal", ELEMENTS_PALETTE_SHADE_INDEXES),
-  green: getSpecificColorShades("green", ELEMENTS_PALETTE_SHADE_INDEXES),
-  yellow: getSpecificColorShades("yellow", ELEMENTS_PALETTE_SHADE_INDEXES),
-  orange: getSpecificColorShades("orange", ELEMENTS_PALETTE_SHADE_INDEXES),
-  // radix bronze shades 3,5,7,9,11
+  // open-color from https://github.com/yeun/open-color/blob/master/open-color.js
+  // corresponds to indexes [0,2,4,6,8] (weights: 50, 200, 400, 600, 800)
+  gray: ["#f8f9fa", "#e9ecef", "#ced4da", "#868e96", "#343a40"],
+  red: ["#fff5f5", "#ffc9c9", "#ff8787", "#fa5252", "#e03131"],
+  pink: ["#fff0f6", "#fcc2d7", "#f783ac", "#e64980", "#c2255c"],
+  grape: ["#f8f0fc", "#eebefa", "#da77f2", "#be4bdb", "#9c36b5"],
+  violet: ["#f3f0ff", "#d0bfff", "#9775fa", "#7950f2", "#6741d9"],
+  blue: ["#e7f5ff", "#a5d8ff", "#4dabf7", "#228be6", "#1971c2"],
+  cyan: ["#e3fafc", "#99e9f2", "#3bc9db", "#15aabf", "#0c8599"],
+  teal: ["#e6fcf5", "#96f2d7", "#38d9a9", "#12b886", "#099268"],
+  green: ["#ebfbee", "#b2f2bb", "#69db7c", "#40c057", "#2f9e44"],
+  yellow: ["#fff9db", "#ffec99", "#ffd43b", "#fab005", "#f08c00"],
+  orange: ["#fff4e6", "#ffd8a8", "#ffa94d", "#fd7e14", "#e8590c"],
+  // radix bronze shades [3,5,7,9,11]
   bronze: ["#f8f1ee", "#eaddd7", "#d2bab0", "#a18072", "#846358"],
-} as ColorPalette;
+} as const;
+
+export type ColorPalette = typeof COLOR_PALETTE;
+export type ColorPickerColor = keyof typeof COLOR_PALETTE;
 
 const COMMON_ELEMENT_SHADES = pick(COLOR_PALETTE, [
   "cyan",
@@ -198,9 +227,13 @@ const COMMON_ELEMENT_SHADES = pick(COLOR_PALETTE, [
   "red",
 ]);
 
-// -----------------------------------------------------------------------------
 // quick picks defaults
 // -----------------------------------------------------------------------------
+
+/** number of slots in the color-picker top-picks strip — the strip layout is
+ * sized for exactly this many swatches, and pick customization (replace /
+ * reorder) preserves it */
+export const COLOR_TOP_PICKS_SLOTS = 5;
 
 // ORDER matters for positioning in quick picker
 export const DEFAULT_ELEMENT_STROKE_PICKS = [
@@ -220,6 +253,17 @@ export const DEFAULT_ELEMENT_BACKGROUND_PICKS = [
   COLOR_PALETTE.yellow[DEFAULT_ELEMENT_BACKGROUND_COLOR_INDEX],
 ] as ColorTuple;
 
+// ORDER matters for positioning in quick picker.
+// Same as element background picks, with `transparent` (a no-op fill for the
+// bucket tool) swapped for white.
+export const BUCKET_FILL_BACKGROUND_PICKS = [
+  COLOR_PALETTE.white,
+  COLOR_PALETTE.red[DEFAULT_ELEMENT_BACKGROUND_COLOR_INDEX],
+  COLOR_PALETTE.green[DEFAULT_ELEMENT_BACKGROUND_COLOR_INDEX],
+  COLOR_PALETTE.blue[DEFAULT_ELEMENT_BACKGROUND_COLOR_INDEX],
+  COLOR_PALETTE.yellow[DEFAULT_ELEMENT_BACKGROUND_COLOR_INDEX],
+] as ColorTuple;
+
 // ORDER matters for positioning in quick picker
 export const DEFAULT_CANVAS_BACKGROUND_PICKS = [
   COLOR_PALETTE.white,
@@ -233,7 +277,6 @@ export const DEFAULT_CANVAS_BACKGROUND_PICKS = [
   "#fdf8f6",
 ] as ColorTuple;
 
-// -----------------------------------------------------------------------------
 // palette defaults
 // -----------------------------------------------------------------------------
 
@@ -259,27 +302,29 @@ export const DEFAULT_ELEMENT_BACKGROUND_COLOR_PALETTE = {
   ...COMMON_ELEMENT_SHADES,
 } as const;
 
-// -----------------------------------------------------------------------------
-// helpers
+// color palette helpers
 // -----------------------------------------------------------------------------
 
 // !!!MUST BE WITHOUT GRAY, TRANSPARENT AND BLACK!!!
-export const getAllColorsSpecificShade = (index: 0 | 1 | 2 | 3 | 4) =>
-  [
-    // 2nd row
-    COLOR_PALETTE.cyan[index],
-    COLOR_PALETTE.blue[index],
-    COLOR_PALETTE.violet[index],
-    COLOR_PALETTE.grape[index],
-    COLOR_PALETTE.pink[index],
+export const getAllColorsSpecificShade = (index: 0 | 1 | 2 | 3 | 4) => [
+  // 2nd row
+  COLOR_PALETTE.cyan[index],
+  COLOR_PALETTE.blue[index],
+  COLOR_PALETTE.violet[index],
+  COLOR_PALETTE.grape[index],
+  COLOR_PALETTE.pink[index],
 
-    // 3rd row
-    COLOR_PALETTE.green[index],
-    COLOR_PALETTE.teal[index],
-    COLOR_PALETTE.yellow[index],
-    COLOR_PALETTE.orange[index],
-    COLOR_PALETTE.red[index],
-  ] as const;
+  // 3rd row
+  COLOR_PALETTE.green[index],
+  COLOR_PALETTE.teal[index],
+  COLOR_PALETTE.yellow[index],
+  COLOR_PALETTE.orange[index],
+  COLOR_PALETTE.red[index],
+];
+
+// -----------------------------------------------------------------------------
+// other helpers
+// -----------------------------------------------------------------------------
 
 export const rgbToHex = (r: number, g: number, b: number, a?: number) => {
   // (1 << 24) adds 0x1000000 to ensure the hex string is always 7 chars,
@@ -299,4 +344,102 @@ export const rgbToHex = (r: number, g: number, b: number, a?: number) => {
   return hex6;
 };
 
+/**
+ * @returns the color with its alpha replaced by `alpha` (as #RRGGBBAA), or the
+ *  input unchanged if it's not a valid color
+ */
+export const setColorAlpha = (color: string, alpha: number): string => {
+  const tc = tinycolor(color);
+  if (!tc.isValid()) {
+    return color;
+  }
+  const { r, g, b } = tc.toRgb();
+  return rgbToHex(r, g, b, alpha);
+};
+
+/**
+ * @returns #RRGGBB or #RRGGBBAA based on color containing non-opaque alpha,
+ *  null if not valid color
+ */
+export const colorToHex = (color: string): string | null => {
+  const tc = tinycolor(color);
+  if (!tc.isValid()) {
+    return null;
+  }
+  const { r, g, b, a } = tc.toRgb();
+  return rgbToHex(r, g, b, a);
+};
+
+export const isTransparent = (color: string) => {
+  return tinycolor(color).getAlpha() === 0;
+};
+
+/**
+ * Whether the color is fully opaque (alpha exactly 1).
+ *
+ * NOT the negation of `isTransparent`, which is true only at alpha 0 — a
+ * partial-alpha color (`#RRGGBBAA`, `rgba(…, 0.5)`) is neither transparent
+ * (it renders) nor opaque (what's beneath shows through it).
+ */
+export const isOpaqueColor = (color: string) => {
+  return tinycolor(color).getAlpha() === 1;
+};
+
 // -----------------------------------------------------------------------------
+// color contract helpers
+// -----------------------------------------------------------------------------
+
+export const COLOR_OUTLINE_CONTRAST_THRESHOLD = 240;
+
+const calculateContrast = (r: number, g: number, b: number): number => {
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq;
+};
+
+// YIQ algo, inspiration from https://stackoverflow.com/a/11868398
+export const isColorDark = (color: string, threshold = 160): boolean => {
+  // no color ("") -> assume it default to black
+  if (!color) {
+    return true;
+  }
+
+  if (isTransparent(color)) {
+    return false;
+  }
+
+  const tc = tinycolor(color);
+  if (!tc.isValid()) {
+    // invalid color -> assume it defaults to black
+    return true;
+  }
+
+  const { r, g, b } = tc.toRgb();
+  return calculateContrast(r, g, b) < threshold;
+};
+
+// -----------------------------------------------------------------------------
+// normalization
+// -----------------------------------------------------------------------------
+
+/**
+ * tries to keep the input color as-is if it's valid, making minimal adjustments
+ * (trimming whitespace or adding `#` to hex colors)
+ */
+export const normalizeInputColor = (color: string): string | null => {
+  color = color.trim();
+  if (isTransparent(color)) {
+    return color;
+  }
+
+  const tc = tinycolor(color);
+  if (tc.isValid()) {
+    // testing for `#` first fixes a bug on Electron (more specfically, an
+    // Obsidian popout window), where a hex color without `#` is considered valid
+    if (["hex", "hex8"].includes(tc.getFormat()) && !color.startsWith("#")) {
+      return `#${color}`;
+    }
+    return color;
+  }
+
+  return null;
+};

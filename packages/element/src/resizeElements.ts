@@ -34,6 +34,17 @@ import {
 } from "./bounds";
 import { LinearElementEditor } from "./linearElementEditor";
 import {
+  preserveCalloutTip,
+  getCalloutSelectionFrame,
+  transformWholeCallout,
+  calloutWorldToLocal,
+} from "./calloutTransform";
+import { getCalloutTailTipGlobalCoords } from "./callout";
+import {
+  getCalloutAttachmentGlobalCoords,
+  pointToPerimeterRatio,
+} from "./callout";
+import {
   getBoundTextElement,
   getBoundTextElementId,
   getContainerElement,
@@ -50,6 +61,7 @@ import {
 import { wrapText } from "./textWrapping";
 import {
   isArrowElement,
+  isCalloutElement,
   isBindingElement,
   isBoundToContainer,
   isElbowArrow,
@@ -96,10 +108,82 @@ export const transformElements = (
   pointerY: number,
   centerX: number,
   centerY: number,
+  calloutSelectionMode: "box" | "whole" = "box",
 ): boolean => {
   const elementsMap = scene.getNonDeletedElementsMap();
   if (selectedElements.length === 1) {
     const [element] = selectedElements;
+    if (
+      isCalloutElement(element) &&
+      (calloutSelectionMode === "whole" || element.groupIds.length)
+    ) {
+      const original = originalElements.get(element.id);
+      if (!original || !isCalloutElement(original) || !transformHandleType) {
+        return false;
+      }
+      const frame = getCalloutSelectionFrame(original);
+      let nextFrame = { ...frame };
+      if (transformHandleType === "rotation") {
+        let angle = ((5 * Math.PI) / 2 +
+          Math.atan2(
+            pointerY - frame.y - frame.height / 2,
+            pointerX - frame.x - frame.width / 2,
+          )) as Radians;
+        if (shouldRotateWithDiscreteAngle) {
+          angle = (angle + SHIFT_LOCKING_ANGLE / 2) as Radians;
+          angle = (angle - (angle % SHIFT_LOCKING_ANGLE)) as Radians;
+        }
+        nextFrame.angle = normalizeRadians(angle);
+      } else {
+        const next = getNextSingleWidthAndHeightFromPointer(
+          frame,
+          frame,
+          transformHandleType,
+          pointerX,
+          pointerY,
+          { shouldMaintainAspectRatio, shouldResizeFromCenter },
+        );
+        const width =
+          (next.nextWidth < 0 ? -1 : 1) * Math.max(1, Math.abs(next.nextWidth));
+        const height =
+          (next.nextHeight < 0 ? -1 : 1) *
+          Math.max(1, Math.abs(next.nextHeight));
+        const origin = getResizedOrigin(
+          pointFrom<GlobalPoint>(frame.x, frame.y),
+          frame.width,
+          frame.height,
+          width,
+          height,
+          frame.angle,
+          transformHandleType,
+          shouldMaintainAspectRatio,
+          shouldResizeFromCenter,
+        );
+        nextFrame = { ...frame, ...origin, width, height };
+      }
+      scene.mutateElement(
+        element,
+        transformWholeCallout(original, frame, nextFrame),
+      );
+      const text = getBoundTextElement(element, elementsMap);
+      if (text) {
+        handleBindTextResize(
+          element,
+          scene,
+          transformHandleType,
+          shouldMaintainAspectRatio,
+          shouldResizeFromCenter,
+          "whole",
+        );
+        scene.mutateElement(text, {
+          ...computeBoundTextPosition(element, text, elementsMap),
+          angle: element.angle,
+        });
+      }
+      updateBoundElements(element, scene);
+      return true;
+    }
+    const originalCallout = isCalloutElement(element) ? { ...element } : null;
     if (transformHandleType === "rotation") {
       if (!isElbowArrow(element)) {
         rotateSingleElement(
@@ -147,6 +231,17 @@ export const transformElements = (
     }
     if (isTextElement(element)) {
       updateBoundElements(element, scene);
+    }
+    if (
+      originalCallout &&
+      isCalloutElement(element) &&
+      !element.groupIds.length &&
+      calloutSelectionMode === "box"
+    ) {
+      scene.mutateElement(
+        element,
+        preserveCalloutTip(originalCallout, element),
+      );
     }
     return true;
   } else if (selectedElements.length > 1) {
@@ -234,7 +329,7 @@ const rotateSingleElement = (
   if (isBindingElement(element)) {
     update = {
       ...update,
-    } as ElementUpdate<ExcalidrawArrowElement>;
+    } as ElementUpdate<NonDeletedExcalidrawElement>;
 
     if (element.startBinding) {
       unbindBindingElement(element, "start", scene);
@@ -388,7 +483,7 @@ export const resizeSingleTextElement = (
       shouldResizeFromCenter,
     );
 
-    const resizedElement: Partial<ExcalidrawTextElement> = {
+    const resizedElement: Partial<NonDeleted<ExcalidrawTextElement>> = {
       width: Math.abs(newWidth),
       height: Math.abs(metrics.height),
       x: newOrigin.x,
@@ -493,10 +588,18 @@ export const getResizeOffsetXY = (
   elementsMap: ElementsMap,
   x: number,
   y: number,
+  calloutSelectionMode: "box" | "whole" = "box",
 ): [number, number] => {
+  const singleElement = selectedElements[0];
   const [x1, y1, x2, y2] =
     selectedElements.length === 1
-      ? getElementAbsoluteCoords(selectedElements[0], elementsMap)
+      ? getElementAbsoluteCoords(
+          isCalloutElement(singleElement) &&
+            (calloutSelectionMode === "whole" || singleElement.groupIds.length)
+            ? getCalloutSelectionFrame(singleElement)
+            : singleElement,
+          elementsMap,
+        )
       : getCommonBounds(selectedElements);
   const cx = (x1 + x2) / 2;
   const cy = (y1 + y2) / 2;
@@ -722,8 +825,8 @@ const getResizedOrigin = (
 export const resizeSingleElement = (
   nextWidth: number,
   nextHeight: number,
-  latestElement: ExcalidrawElement,
-  origElement: ExcalidrawElement,
+  latestElement: NonDeletedExcalidrawElement,
+  origElement: NonDeletedExcalidrawElement,
   originalElementsMap: ElementsMap,
   scene: Scene,
   handleDirection: TransformHandleDirection,
@@ -731,10 +834,12 @@ export const resizeSingleElement = (
     shouldInformMutation = true,
     shouldMaintainAspectRatio = false,
     shouldResizeFromCenter = false,
+    calloutSelectionMode = "box",
   }: {
     shouldMaintainAspectRatio?: boolean;
     shouldResizeFromCenter?: boolean;
     shouldInformMutation?: boolean;
+    calloutSelectionMode?: "box" | "whole";
   } = {},
 ) => {
   if (isTextElement(latestElement) && isTextElement(origElement)) {
@@ -904,6 +1009,17 @@ export const resizeSingleElement = (
       }
     }
 
+    if (isCalloutElement(origElement) && isCalloutElement(latestElement)) {
+      Object.assign(
+        updates,
+        calloutSelectionMode === "box" && !origElement.groupIds.length
+          ? preserveCalloutTip(origElement, updates)
+          : transformWholeCallout(origElement, origElement, {
+              ...origElement,
+              ...updates,
+            }),
+      );
+    }
     scene.mutateElement(latestElement, updates, {
       informMutation: shouldInformMutation,
       isDragging: false,
@@ -919,6 +1035,8 @@ export const resizeSingleElement = (
       scene,
       handleDirection,
       shouldMaintainAspectRatio,
+      shouldResizeFromCenter,
+      origElement.groupIds.length ? "whole" : calloutSelectionMode,
     );
 
     updateBoundElements(latestElement, scene);
@@ -1200,7 +1318,10 @@ export const resizeMultipleElements = (
       }[],
       element,
     ) => {
-      const origElement = originalElementsMap!.get(element.id);
+      // originalElementsMap holds snapshots of the (non-deleted) selection
+      const origElement = originalElementsMap!.get(element.id) as
+        | NonDeletedExcalidrawElement
+        | undefined;
       if (origElement) {
         acc.push({ orig: origElement, latest: element });
       }
@@ -1239,9 +1360,10 @@ export const resizeMultipleElements = (
       ];
     }, [] as ExcalidrawTextElementWithContainer[]);
 
-    boundingBox = getCommonBoundingBox(
-      targetElements.map(({ orig }) => orig).concat(boundTextElements),
-    );
+    boundingBox = getCommonBoundingBox([
+      ...targetElements.map(({ orig }) => orig),
+      ...boundTextElements,
+    ]);
   }
   const { minX, minY, maxX, maxY, midX, midY } = boundingBox;
   const width = maxX - minX;
@@ -1333,6 +1455,8 @@ export const resizeMultipleElements = (
         Pick<ExcalidrawElement, "x" | "y" | "width" | "height" | "angle">
       > & {
         points?: ExcalidrawLinearElement["points"];
+        tailTip?: LocalPoint;
+        tailAttachment?: number;
         fontSize?: ExcalidrawTextElement["fontSize"];
         scale?: ExcalidrawImageElement["scale"];
         boundTextFontSize?: ExcalidrawTextElement["fontSize"];
@@ -1378,6 +1502,24 @@ export const resizeMultipleElements = (
         angle,
         ...rescaledPoints,
       };
+      if (isCalloutElement(orig)) {
+        const tip = getCalloutTailTipGlobalCoords(orig);
+        update.tailTip = calloutWorldToLocal({ ...orig, ...update }, [
+          anchorX + (tip[0] - anchorX) * scaleX * flipFactorX,
+          anchorY + (tip[1] - anchorY) * scaleY * flipFactorY,
+        ]);
+        const attach = getCalloutAttachmentGlobalCoords(orig);
+        const localAttachment = calloutWorldToLocal({ ...orig, ...update }, [
+          anchorX + (attach[0] - anchorX) * scaleX * flipFactorX,
+          anchorY + (attach[1] - anchorY) * scaleY * flipFactorY,
+        ]);
+        update.tailAttachment = pointToPerimeterRatio(
+          localAttachment,
+          width,
+          height,
+          orig.roundness,
+        );
+      }
 
       if (isElbowArrow(orig)) {
         // Mirror fixed point binding for elbow arrows
@@ -1491,7 +1633,14 @@ export const resizeMultipleElements = (
           fontSize: boundTextFontSize,
           angle: isLinearElement(element) ? undefined : angle,
         });
-        handleBindTextResize(element, scene, handleDirection, true);
+        handleBindTextResize(
+          element,
+          scene,
+          handleDirection,
+          true,
+          shouldResizeFromCenter,
+          "whole",
+        );
       }
     }
 

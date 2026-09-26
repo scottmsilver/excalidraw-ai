@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
+import type { AppState } from "@excalidraw/excalidraw/types";
+
 import {
   getBoundsFromPoints,
   screenToScene,
   sceneToScreen,
   isClickOnCaptureUI,
 } from "./captureUtils";
-
-import type { AppState } from "@excalidraw/excalidraw/types";
 
 describe("captureUtils", () => {
   describe("getBoundsFromPoints", () => {
@@ -155,7 +155,9 @@ describe("captureUtils", () => {
     });
 
     it("returns false when no capture UI elements exist", () => {
-      (document.elementsFromPoint as ReturnType<typeof vi.fn>).mockReturnValue([]);
+      (document.elementsFromPoint as ReturnType<typeof vi.fn>).mockReturnValue(
+        [],
+      );
       const result = isClickOnCaptureUI(100, 100);
       expect(result).toBe(false);
     });
@@ -165,7 +167,9 @@ describe("captureUtils", () => {
       button.setAttribute("data-testid", "capture-tool-button");
       document.body.appendChild(button);
 
-      (document.elementsFromPoint as ReturnType<typeof vi.fn>).mockReturnValue([button]);
+      (document.elementsFromPoint as ReturnType<typeof vi.fn>).mockReturnValue([
+        button,
+      ]);
 
       const result = isClickOnCaptureUI(50, 50);
       expect(result).toBe(true);
@@ -176,7 +180,9 @@ describe("captureUtils", () => {
       switcher.setAttribute("data-capture-mode-switcher", "");
       document.body.appendChild(switcher);
 
-      (document.elementsFromPoint as ReturnType<typeof vi.fn>).mockReturnValue([switcher]);
+      (document.elementsFromPoint as ReturnType<typeof vi.fn>).mockReturnValue([
+        switcher,
+      ]);
 
       const result = isClickOnCaptureUI(50, 50);
       expect(result).toBe(true);
@@ -189,7 +195,10 @@ describe("captureUtils", () => {
       button.appendChild(child);
       document.body.appendChild(button);
 
-      (document.elementsFromPoint as ReturnType<typeof vi.fn>).mockReturnValue([child, button]);
+      (document.elementsFromPoint as ReturnType<typeof vi.fn>).mockReturnValue([
+        child,
+        button,
+      ]);
 
       const result = isClickOnCaptureUI(50, 50);
       expect(result).toBe(true);

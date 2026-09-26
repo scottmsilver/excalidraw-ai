@@ -15,7 +15,7 @@ import type {
   ValueOf,
 } from "@excalidraw/common/utility-types";
 
-export type ChartType = "bar" | "line";
+export type ChartType = "bar" | "line" | "radar";
 export type FillStyle = "hachure" | "cross-hatch" | "solid" | "zigzag";
 export type FontFamilyKeys = keyof typeof FONT_FAMILY;
 export type FontFamilyValues = typeof FONT_FAMILY[FontFamilyKeys];
@@ -49,6 +49,18 @@ type _ExcalidrawElementBase = Readonly<{
   roundness: null | { type: RoundnessType; value?: number };
   roughness: number;
   opacity: number;
+  autoContrast?: Readonly<{
+    foreground: boolean;
+    background: boolean;
+    opacity: boolean;
+  }>;
+  autoContrastResolved?: import("./calloutContrast").CalloutContrastResult;
+  autoContrastManualColors?: Readonly<{
+    foreground?: string;
+    background?: string;
+  }>;
+  /** Fill transparency, independent of foreground and overall element opacity. */
+  fillOpacity?: number;
   width: number;
   height: number;
   angle: Radians;
@@ -100,6 +112,21 @@ export type ExcalidrawEllipseElement = _ExcalidrawElementBase & {
 export type ExcalidrawCalloutElement = _ExcalidrawElementBase &
   Readonly<{
     type: "callout";
+    // Absent on legacy documents, whose explicit appearance stays unchanged.
+    calloutAutoStyle?: Readonly<{
+      foreground: boolean;
+      background: boolean;
+      opacity: boolean;
+    }>;
+    // Body fill alpha only; the inherited opacity still affects the whole element.
+    calloutBackgroundOpacity?: number;
+    // Explicit displayed colors captured when an Auto field is locked. Normal
+    // palette edits clear the matching value and retain standard theme semantics.
+    calloutManualColors?: Readonly<{
+      foreground?: string;
+      background?: string;
+    }>;
+    calloutResolvedStyle?: import("./calloutContrast").CalloutContrastResult;
     // Tail attachment point as ratio around perimeter (0-1), going clockwise from top-left
     tailAttachment: number;
     // Tail tip position relative to element origin
@@ -242,7 +269,7 @@ export type Ordered<TElement extends ExcalidrawElement> = TElement & {
 export type OrderedExcalidrawElement = Ordered<ExcalidrawElement>;
 
 export type NonDeleted<TElement extends ExcalidrawElement> = TElement & {
-  isDeleted: boolean;
+  isDeleted: false;
 };
 
 export type NonDeletedExcalidrawElement = NonDeleted<ExcalidrawElement>;
@@ -269,6 +296,13 @@ export type ExcalidrawTextElement = _ExcalidrawElementBase &
      *  with font size (using `getLineHeightInPx` helper).
      */
     lineHeight: number & { _brand: "unitlessLineHeight" };
+    /**
+     * Position of text bound to a linear element (such as an arrow),
+     * expressed as a normalized arc-length parameter (0–1) along the
+     * container's whole path. Independent of how the path is segmented,
+     * so it survives midpoint insertion and other geometry changes.
+     * */
+    labelPosition?: number | null;
   }>;
 
 export type ExcalidrawBindableElement =
@@ -320,19 +354,32 @@ export type PointsPositionUpdates = Map<
   { point: LocalPoint; isDragging?: boolean }
 >;
 
+export type CardinalityArrowhead =
+  | "cardinality_one"
+  | "cardinality_many"
+  | "cardinality_one_or_many"
+  | "cardinality_exactly_one"
+  | "cardinality_zero_or_one"
+  | "cardinality_zero_or_many";
+
+export type ArrowheadLegacy =
+  | "dot"
+  | "crowfoot_one"
+  | "crowfoot_many"
+  | "crowfoot_one_or_many";
+
 export type Arrowhead =
   | "arrow"
   | "bar"
-  | "dot" // legacy. Do not use for new elements.
   | "circle"
   | "circle_outline"
   | "triangle"
   | "triangle_outline"
   | "diamond"
   | "diamond_outline"
-  | "crowfoot_one"
-  | "crowfoot_many"
-  | "crowfoot_one_or_many";
+  | CardinalityArrowhead;
+
+export type AnyArrowhead = Arrowhead | ArrowheadLegacy;
 
 export type ExcalidrawLinearElement = _ExcalidrawElementBase &
   Readonly<{
@@ -388,12 +435,20 @@ export type ExcalidrawElbowArrowElement = Merge<
   }
 >;
 
+export type StrokeVariability = "variable" | "constant";
+
+export type StrokeOptions = Readonly<{
+  variability: StrokeVariability;
+  streamline: number;
+}>;
+
 export type ExcalidrawFreeDrawElement = _ExcalidrawElementBase &
   Readonly<{
     type: "freedraw";
     points: readonly LocalPoint[];
     pressures: readonly number[];
     simulatePressure: boolean;
+    strokeOptions: StrokeOptions;
   }>;
 
 export type FileId = string & { _brand: "FileId" };
@@ -440,6 +495,10 @@ export type NonDeletedSceneElementsMap = Map<
 export type ElementsMapOrArray =
   | readonly ExcalidrawElement[]
   | Readonly<ElementsMap>;
+
+export type NonDeletedElementsMapOrArray =
+  | readonly NonDeletedExcalidrawElement[]
+  | Readonly<NonDeletedElementsMap | NonDeletedSceneElementsMap>;
 
 export type ExcalidrawLinearElementSubType =
   | "line"

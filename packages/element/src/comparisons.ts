@@ -8,6 +8,9 @@ export const hasBackground = (type: ElementOrToolType) =>
   type === "diamond" ||
   type === "line" ||
   type === "freedraw" ||
+  type === "autoshape" ||
+  // tool-only type; makes the `G` background shortcut work for bucket fill
+  type === "bucketfill" ||
   type === "callout";
 
 export const hasStrokeColor = (type: ElementOrToolType) =>
@@ -19,6 +22,7 @@ export const hasStrokeColor = (type: ElementOrToolType) =>
   type === "line" ||
   type === "text" ||
   type === "embeddable" ||
+  type === "autoshape" ||
   type === "callout";
 
 export const hasStrokeWidth = (type: ElementOrToolType) =>
@@ -30,6 +34,7 @@ export const hasStrokeWidth = (type: ElementOrToolType) =>
   type === "freedraw" ||
   type === "arrow" ||
   type === "line" ||
+  type === "autoshape" ||
   type === "callout";
 
 export const hasStrokeStyle = (type: ElementOrToolType) =>
@@ -40,7 +45,10 @@ export const hasStrokeStyle = (type: ElementOrToolType) =>
   type === "diamond" ||
   type === "arrow" ||
   type === "line" ||
+  type === "autoshape" ||
   type === "callout";
+
+export const hasFreedrawMode = (type: ElementOrToolType) => type === "freedraw";
 
 export const canChangeRoundness = (type: ElementOrToolType) =>
   type === "rectangle" ||

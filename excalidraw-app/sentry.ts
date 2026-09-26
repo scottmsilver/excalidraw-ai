@@ -5,7 +5,6 @@ import callsites from "callsites";
 const SentryEnvHostnameMap: { [key: string]: string } = {
   "excalidraw.com": "production",
   "staging.excalidraw.com": "staging",
-  "vercel.app": "staging",
 };
 
 const SENTRY_DISABLED = import.meta.env.VITE_APP_DISABLE_SENTRY === "true";

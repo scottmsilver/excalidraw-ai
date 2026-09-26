@@ -71,7 +71,9 @@ export const CrosshatchPattern: React.FC<{ id: string }> = ({ id }) => (
  */
 export const SelectionOverlaySVG: React.FC<{
   id: string;
-  shape: { type: "rect"; x: number; y: number; width: number; height: number } | { type: "polygon"; points: string };
+  shape:
+    | { type: "rect"; x: number; y: number; width: number; height: number }
+    | { type: "polygon"; points: string };
   children?: React.ReactNode;
 }> = ({ id, shape, children }) => (
   <svg style={fullscreenSvgStyle}>
@@ -80,15 +82,34 @@ export const SelectionOverlaySVG: React.FC<{
       <mask id={`${id}-mask`}>
         <rect x="0" y="0" width="100%" height="100%" fill="white" />
         {shape.type === "rect" ? (
-          <rect x={shape.x} y={shape.y} width={shape.width} height={shape.height} fill="black" />
+          <rect
+            x={shape.x}
+            y={shape.y}
+            width={shape.width}
+            height={shape.height}
+            fill="black"
+          />
         ) : (
           <polygon points={shape.points} fill="black" />
         )}
       </mask>
     </defs>
-    <rect x="0" y="0" width="100%" height="100%" fill={`url(#${id}-pattern)`} mask={`url(#${id}-mask)`} />
+    <rect
+      x="0"
+      y="0"
+      width="100%"
+      height="100%"
+      fill={`url(#${id}-pattern)`}
+      mask={`url(#${id}-mask)`}
+    />
     {shape.type === "rect" ? (
-      <rect x={shape.x} y={shape.y} width={shape.width} height={shape.height} {...selectionOutlineProps} />
+      <rect
+        x={shape.x}
+        y={shape.y}
+        width={shape.width}
+        height={shape.height}
+        {...selectionOutlineProps}
+      />
     ) : (
       <polygon points={shape.points} {...selectionOutlineProps} />
     )}
@@ -114,8 +135,9 @@ export const selectionOutlineProps = {
 /**
  * Convert an array of points to an SVG polygon points string.
  */
-export const pointsToPolygonString = (points: Array<[number, number]>): string =>
-  points.map(([x, y]) => `${x},${y}`).join(" ");
+export const pointsToPolygonString = (
+  points: Array<[number, number]>,
+): string => points.map(([x, y]) => `${x},${y}`).join(" ");
 
 /**
  * Convert normalized points (0-1 range) to screen coordinates.

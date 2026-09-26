@@ -11,7 +11,7 @@ import {
   boltIcon,
   tablerCheckIcon,
   alertTriangleIcon,
-  clockIcon,
+  historyCommandIcon as clockIcon,
   copyIcon,
   TrashIcon,
   collapseDownIcon,

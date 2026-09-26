@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, fireEvent, act } from "@testing-library/react";
 
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+
 import { CaptureRectangleOverlay } from "./CaptureRectangleOverlay";
 import { CaptureLassoOverlay } from "./CaptureLassoOverlay";
 import { CapturePolygonOverlay } from "./CapturePolygonOverlay";
-
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
 describe("CaptureRectangleOverlay Integration", () => {
   let mockExcalidrawAPI: ExcalidrawImperativeAPI;
@@ -74,7 +74,9 @@ describe("CaptureRectangleOverlay Integration", () => {
       />,
     );
 
-    expect(mockExcalidrawAPI.setActiveTool).toHaveBeenCalledWith({ type: "hand" });
+    expect(mockExcalidrawAPI.setActiveTool).toHaveBeenCalledWith({
+      type: "hand",
+    });
   });
 
   it("draws selection rectangle on mouse drag", () => {
@@ -211,7 +213,9 @@ describe("CaptureRectangleOverlay Integration", () => {
     document.body.appendChild(captureButton);
 
     // Mock that we're clicking on capture UI
-    (document.elementsFromPoint as ReturnType<typeof vi.fn>).mockReturnValue([captureButton]);
+    (document.elementsFromPoint as ReturnType<typeof vi.fn>).mockReturnValue([
+      captureButton,
+    ]);
 
     const { container } = render(
       <CaptureRectangleOverlay

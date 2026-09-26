@@ -2,16 +2,17 @@ import { useEffect, useState } from "react";
 
 import { getElementAbsoluteCoords } from "@excalidraw/element";
 
-import { sceneCoordsToViewportCoords } from "..";
-
-import Spinner from "./Spinner";
-
-import "./ConvertingOverlay.scss";
+import { sceneCoordsToViewportCoords } from "@excalidraw/common";
 
 import type {
   ElementsMap,
   ExcalidrawImageElement,
 } from "@excalidraw/element/types";
+
+import Spinner from "./Spinner";
+
+import "./ConvertingOverlay.scss";
+
 import type { AppState } from "../types";
 
 interface ConvertingOverlayProps {

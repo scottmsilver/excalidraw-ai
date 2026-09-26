@@ -7,8 +7,12 @@ import {
   useEditorInterface,
   exportToBlob,
   MIME_TYPES,
+  ExcalidrawAPIProvider,
+  useExcalidrawAPI,
+  useExcalidrawStateValue,
 } from "@excalidraw/excalidraw";
 import { useTunnels } from "@excalidraw/excalidraw/context/tunnels";
+import { getNonDeletedElements } from "@excalidraw/element";
 import { trackEvent } from "@excalidraw/excalidraw/analytics";
 import { getDefaultAppState } from "@excalidraw/excalidraw/appState";
 import {
@@ -23,7 +27,6 @@ import Trans from "@excalidraw/excalidraw/components/Trans";
 import {
   APP_NAME,
   EVENT,
-  THEME,
   VERSION_TIMEOUT,
   debounce,
   getVersion,
@@ -36,9 +39,14 @@ import {
   randomId,
 } from "@excalidraw/common";
 import polyfill from "@excalidraw/excalidraw/polyfill";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { loadFromBlob } from "@excalidraw/excalidraw/data/blob";
-import { useCallbackRefState } from "@excalidraw/excalidraw/hooks/useCallbackRefState";
 import { t } from "@excalidraw/excalidraw/i18n";
 
 import {
@@ -86,6 +94,7 @@ import type {
   ExcalidrawInitialDataState,
   UIAppState,
   DataURL,
+  ExcalidrawProps,
 } from "@excalidraw/excalidraw/types";
 import type { ResolutionType } from "@excalidraw/common/utility-types";
 import type { ResolvablePromise } from "@excalidraw/common/utils";
@@ -121,6 +130,7 @@ import Collab, {
   collabAPIAtom,
   isCollaboratingAtom,
   isOfflineAtom,
+  userToFollowAtom,
 } from "./collab/Collab";
 import { AppFooter } from "./components/AppFooter";
 import { AppMainMenu } from "./components/AppMainMenu";
@@ -139,6 +149,7 @@ import {
 } from "./data";
 
 import { updateStaleImageStatuses } from "./data/FileManager";
+import { FileStatusStore } from "./data/fileStatusStore";
 import {
   importFromLocalStorage,
   importUsernameFromLocalStorage,
@@ -162,6 +173,7 @@ import DebugCanvas, {
   isVisualDebuggerEnabled,
   loadSavedDebugState,
 } from "./components/DebugCanvas";
+import { useSimulatedCollaborators } from "./debugCollaborators";
 import { AIComponents } from "./components/AI";
 import { ExcalidrawPlusIframeExport } from "./ExcalidrawPlusIframeExport";
 import {
@@ -458,8 +470,6 @@ const AIManipulationUI: React.FC<{
     acceptResult,
     rejectResult,
     elementsSnapshot,
-    setElementsSnapshot,
-    initializeAIUndoState,
     pushAIUndoEntry,
     clearAIUndoStack,
     aiUndo,
@@ -535,7 +545,6 @@ const AIManipulationUI: React.FC<{
             captureUpdate: CaptureUpdateAction.NEVER,
           });
         }
-        return;
       }
     };
 
@@ -571,7 +580,9 @@ const AIManipulationUI: React.FC<{
   // Sync AI undo state to excalidraw's history UI
   // This makes the native undo/redo buttons reflect AI mode state and behavior
   React.useEffect(() => {
-    if (!excalidrawAPI) return;
+    if (!excalidrawAPI) {
+      return;
+    }
 
     if (isAIModeActive) {
       // Override history button states and behavior with AI undo stack
@@ -585,10 +596,17 @@ const AIManipulationUI: React.FC<{
       // Clear overrides when exiting AI mode
       excalidrawAPI.history.clearOverride();
     }
-  }, [isAIModeActive, excalidrawAPI, canAIUndo, canAIRedo, handleAIUndo, handleAIRedo]);
+  }, [
+    isAIModeActive,
+    excalidrawAPI,
+    canAIUndo,
+    canAIRedo,
+    handleAIUndo,
+    handleAIRedo,
+  ]);
 
   // Get app state for overlay positioning
-  const appState = excalidrawAPI?.getAppState();
+  const appState = useExcalidrawStateValue(["zoom", "scrollX", "scrollY"]);
   const zoom = appState?.zoom?.value ?? 1;
   const scrollX = appState?.scrollX ?? 0;
   const scrollY = appState?.scrollY ?? 0;
@@ -689,9 +707,6 @@ const AIManipulationUI: React.FC<{
         const snapshotElements =
           elementsSnapshot as readonly ExcalidrawElement[];
 
-        // Build set of original element IDs from snapshot
-        const originalElementIds = new Set(snapshotElements.map((el) => el.id));
-
         // Use exportBounds for positioning - this matches exactly where the preview was shown
         // exportBounds is computed at execute time from the actual exported image
         let minX: number;
@@ -699,7 +714,11 @@ const AIManipulationUI: React.FC<{
         let width: number;
         let height: number;
 
-        if (exportBounds && exportBounds.imageWidth && exportBounds.imageHeight) {
+        if (
+          exportBounds &&
+          exportBounds.imageWidth &&
+          exportBounds.imageHeight
+        ) {
           // Use the same bounds that were used for the export/preview
           minX = exportBounds.minX - exportBounds.exportPadding;
           minY = exportBounds.minY - exportBounds.exportPadding;
@@ -724,29 +743,12 @@ const AIManipulationUI: React.FC<{
           status: "saved",
         });
 
-        // Get current elements and filter/transform them:
-        // 1. Keep only elements that existed before AI mode (filter out annotations)
-        // 2. Unlock those elements
-        // 3. Mark annotations as deleted (preserves history better than removing)
-        const currentElements = excalidrawAPI.getSceneElements();
-        const cleanedElements = currentElements.map((el) => {
-          if (originalElementIds.has(el.id)) {
-            // Original element - unlock it
-            return newElementWith(el, { locked: false });
-          } else {
-            // Annotation - mark as deleted
-            return newElementWith(el, { isDeleted: true });
-          }
-        });
-
-        // Add AI image and sync indices
+        // Restore the original scene, including original locked states, and
+        // add the accepted image as a single undoable update.
         const finalElements = syncInvalidIndices([
-          ...cleanedElements,
+          ...snapshotElements,
           imageElement,
         ]);
-
-        // Single update: clean up annotations + unlock originals + add AI image
-        // This is recorded as a single undo entry
         excalidrawAPI.updateScene({
           elements: finalElements,
           captureUpdate: CaptureUpdateAction.IMMEDIATELY,
@@ -796,25 +798,8 @@ const AIManipulationUI: React.FC<{
 
     // Get original element IDs from snapshot
     const snapshotElements = elementsSnapshot as readonly ExcalidrawElement[];
-    const originalElementIds = new Set(snapshotElements.map((el) => el.id));
-
     if (excalidrawAPI) {
-      // Get current elements and clean them up:
-      // - Delete annotations (elements not in original snapshot)
-      // - Unlock original elements
-      const currentElements = excalidrawAPI.getSceneElements();
-      const cleanedElements = currentElements.map((el) => {
-        if (originalElementIds.has(el.id)) {
-          // Original element - unlock it
-          return newElementWith(el, { locked: false });
-        } else {
-          // Annotation - mark as deleted
-          return newElementWith(el, { isDeleted: true });
-        }
-      });
-
-      const syncedElements = syncInvalidIndices(cleanedElements);
-      // Use NEVER to avoid recording the cleanup in undo stack
+      const syncedElements = syncInvalidIndices([...snapshotElements]);
       excalidrawAPI.updateScene({
         elements: syncedElements,
         captureUpdate: CaptureUpdateAction.NEVER,
@@ -965,40 +950,6 @@ const AIManipulationUI: React.FC<{
         onAccept={handleAccept}
         onReject={handleReject}
       />
-
-      {/* AI Mode Hint - shows in same style as HintViewer */}
-      {isAIModeActive && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: "80px",
-            left: "50%",
-            transform: "translateX(-50%)",
-            pointerEvents: "none",
-            color: "var(--color-gray-40)",
-            fontSize: "0.75rem",
-            textAlign: "center",
-            zIndex: 100,
-          }}
-        >
-          <kbd
-            style={{
-              display: "inline-block",
-              margin: "0 2px",
-              fontFamily: "monospace",
-              border: "1px solid var(--color-gray-40)",
-              borderRadius: "4px",
-              padding: "1px 4px",
-              fontSize: "10px",
-            }}
-          >
-            Shift
-          </kbd>
-          +Click to place markers
-          {referencePoints.length > 0 && ` (${referencePoints.length} placed)`}
-        </div>
-      )}
-
     </>
   );
 };
@@ -1018,7 +969,7 @@ const getSnapshotElements = (excalidrawAPI: ExcalidrawImperativeAPI) => {
 const lockAllElements = (excalidrawAPI: ExcalidrawImperativeAPI) => {
   const currentElements = excalidrawAPI.getSceneElements();
   const lockedElements = currentElements.map((el) =>
-    newElementWith(el, { locked: true })
+    newElementWith(el, { locked: true }),
   );
   const syncedElements = syncInvalidIndices(lockedElements);
   excalidrawAPI.updateScene({
@@ -1064,7 +1015,9 @@ const AIToolbarButton: React.FC<{
       const currentAppState = excalidrawAPI.getAppState();
 
       // Get the snapshot elements (original before annotations)
-      const cleanElements = elementsSnapshot as readonly ExcalidrawElement[];
+      const cleanElements = getNonDeletedElements(
+        elementsSnapshot as readonly ExcalidrawElement[],
+      );
 
       // Calculate the bounds of all elements for coordinate transformation
       // This matches how exportToBlob crops the image
@@ -1153,27 +1106,21 @@ const AIToolbarButton: React.FC<{
 
   // Toggle AI mode
   const handleToggle = useCallback(() => {
+    if (!excalidrawAPI || isProcessing) {
+      return;
+    }
+    excalidrawAPI.setActiveTool({ type: "selection" });
+    excalidrawAPI.updateScene({
+      appState: { selectedElementIds: {}, openMenu: null, openPopup: null },
+    });
     if (isAIModeActive) {
       // Exiting AI mode via toggle (not accept/reject)
       // Resume history recording
       excalidrawAPI?.history.resume();
 
-      // Get original element IDs from snapshot
       const snapshotElements = elementsSnapshot as readonly ExcalidrawElement[];
-      const originalElementIds = new Set(snapshotElements.map((el) => el.id));
-
       if (excalidrawAPI) {
-        // Clean up: delete annotations, unlock original elements
-        const currentElements = excalidrawAPI.getSceneElements();
-        const cleanedElements = currentElements.map((el) => {
-          if (originalElementIds.has(el.id)) {
-            return newElementWith(el, { locked: false });
-          } else {
-            return newElementWith(el, { isDeleted: true });
-          }
-        });
-
-        const syncedElements = syncInvalidIndices(cleanedElements);
+        const syncedElements = syncInvalidIndices([...snapshotElements]);
         excalidrawAPI.updateScene({
           elements: syncedElements,
           captureUpdate: CaptureUpdateAction.NEVER,
@@ -1197,146 +1144,54 @@ const AIToolbarButton: React.FC<{
 
       enterAIMode();
     }
-  }, [isAIModeActive, excalidrawAPI, elementsSnapshot, clearReferencePoints, exitAIMode, enterAIMode, setElementsSnapshot, initializeAIUndoState]);
-
-  // Allow execution when AI mode is active - user can provide context via:
-  // - Reference points (Shift+Click markers)
-  // - Drawn annotations (arrows, circles, text, etc.)
-  // - Just a text command (e.g., "make this brighter")
-  const canExecute = isAIModeActive;
+  }, [
+    isAIModeActive,
+    excalidrawAPI,
+    elementsSnapshot,
+    clearReferencePoints,
+    exitAIMode,
+    enterAIMode,
+    setElementsSnapshot,
+    initializeAIUndoState,
+    isProcessing,
+  ]);
 
   return (
-    <div style={{ position: "relative", display: "inline-flex" }}>
-      {/* Main AI button */}
-      <button
-        type="button"
-        onClick={handleToggle}
-        disabled={isProcessing}
-        title={isAIModeActive ? "Exit AI Edit mode" : "AI Edit"}
-        className="ToolIcon_type_button"
-        aria-label="AI Edit"
-        style={{
-          color: isAIModeActive ? "var(--color-primary)" : undefined,
-          backgroundColor: isAIModeActive
-            ? "var(--color-primary-light)"
-            : undefined,
-        }}
+    <div className="editor-mode-controls">
+      <div
+        className="editor-mode-switch"
+        role="group"
+        aria-label="Editing mode"
       >
-        <div className="ToolIcon__icon" aria-hidden="true">
-          {MagicIcon}
-        </div>
-      </button>
-
-      {/* Popover when AI mode is active */}
-      {isAIModeActive && (
-        <div
-          style={{
-            position: "absolute",
-            top: "100%",
-            left: "50%",
-            transform: "translateX(-50%)",
-            marginTop: "8px",
-            backgroundColor: "rgba(255, 255, 255, 0.85)",
-            backdropFilter: "blur(8px)",
-            borderRadius: "8px",
-            boxShadow: "0 2px 12px rgba(0, 0, 0, 0.15)",
-            padding: "8px",
-            zIndex: 100,
-            whiteSpace: "nowrap",
-          }}
+        <button
+          type="button"
+          aria-pressed={!isAIModeActive}
+          disabled={isProcessing || !excalidrawAPI}
+          onClick={() => isAIModeActive && handleToggle()}
         >
-          {/* Arrow */}
-          <div
-            style={{
-              position: "absolute",
-              top: "-6px",
-              left: "50%",
-              transform: "translateX(-50%)",
-              width: 0,
-              height: 0,
-              borderLeft: "6px solid transparent",
-              borderRight: "6px solid transparent",
-              borderBottom: "6px solid rgba(255, 255, 255, 0.85)",
-            }}
-          />
-          {/* Help hint in handwriting style */}
-          <div
-            style={{
-              padding: "8px 4px",
-              fontFamily: "Virgil, Segoe UI Emoji, sans-serif",
-              fontSize: "12px",
-              color: "var(--color-gray-60)",
-              lineHeight: 1.4,
-              maxWidth: "180px",
-              textAlign: "left",
-            }}
-          >
-            <div style={{ marginBottom: "4px" }}>
-              <kbd style={{
-                fontFamily: "inherit",
-                backgroundColor: "var(--color-gray-20)",
-                padding: "1px 4px",
-                borderRadius: "3px",
-                fontSize: "11px",
-              }}>Shift</kbd>+Click to place markers
-            </div>
-            <div style={{ marginBottom: "8px" }}>
-              Draw shapes to annotate
-            </div>
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <button
-                type="button"
-                onClick={handleExecute}
-                disabled={!canExecute || isProcessing}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "4px",
-                  padding: "4px 8px",
-                  backgroundColor: canExecute
-                    ? "var(--color-primary)"
-                    : "var(--color-gray-30)",
-                  color: canExecute ? "white" : "var(--color-gray-60)",
-                  border: "none",
-                  borderRadius: "6px",
-                  fontSize: "11px",
-                  fontFamily: "Assistant, system-ui, sans-serif",
-                  fontWeight: 600,
-                  cursor: canExecute ? "pointer" : "not-allowed",
-                }}
-              >
-                {isProcessing ? (
-                  <>
-                    <span
-                      style={{
-                        width: "10px",
-                        height: "10px",
-                        border: "2px solid currentColor",
-                        borderTopColor: "transparent",
-                        borderRadius: "50%",
-                        animation: "spin 1s linear infinite",
-                      }}
-                    />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    {MagicIcon}
-                    Execute
-                    {referencePoints.length > 0 && ` (${referencePoints.length})`}
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-          <style>
-            {`
-              @keyframes spin {
-                to { transform: rotate(360deg); }
-              }
-            `}
-          </style>
-        </div>
+          Edit
+        </button>
+        <button
+          type="button"
+          aria-pressed={isAIModeActive}
+          disabled={isProcessing || !excalidrawAPI}
+          onClick={() => !isAIModeActive && handleToggle()}
+        >
+          AI Edit
+        </button>
+      </div>
+      {isAIModeActive && (
+        <button
+          type="button"
+          className="ai-edit-execute"
+          onClick={handleExecute}
+          disabled={isProcessing}
+          title="Describe and apply your AI edit"
+        >
+          {MagicIcon}
+          {isProcessing ? "Processing…" : "Apply with AI"}
+          {referencePoints.length > 0 && ` (${referencePoints.length})`}
+        </button>
       )}
     </div>
   );
@@ -1359,6 +1214,9 @@ const AIToolbarTunnelContent: React.FC<{
 };
 
 const ExcalidrawWrapper = () => {
+  const { isAIModeActive } = useAIManipulation();
+  const excalidrawAPI = useExcalidrawAPI();
+
   const [errorMessage, setErrorMessage] = useState("");
   const isCollabDisabled = isRunningInIframe();
 
@@ -1389,15 +1247,43 @@ const ExcalidrawWrapper = () => {
     }, VERSION_TIMEOUT);
   }, []);
 
-  const [excalidrawAPI, excalidrawRefCallback] =
-    useCallbackRefState<ExcalidrawImperativeAPI>();
-
   const [, setShareDialogState] = useAtom(shareDialogStateAtom);
   const [collabAPI] = useAtom(collabAPIAtom);
   const [isCollaborating] = useAtomWithInitialValue(isCollaboratingAtom, () => {
     return isCollaborationLink(window.location.href);
   });
   const collabError = useAtomValue(collabErrorIndicatorAtom);
+  const userToFollow = useAtomValue(userToFollowAtom);
+
+  const viewportStatusFrame = useMemo(
+    () =>
+      userToFollow
+        ? {
+            border: "var(--color-primary-hover)",
+            label: {
+              label: (
+                <>
+                  Following{" "}
+                  <span
+                    style={{
+                      display: "block",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      maxWidth: 100,
+                    }}
+                    title={userToFollow.username}
+                  >
+                    {userToFollow.username}
+                  </span>
+                </>
+              ),
+              onClose: () => collabAPI?.setUserToFollow(null),
+            },
+          }
+        : null,
+    [userToFollow, collabAPI],
+  );
 
   useHandleLibrary({
     excalidrawAPI,
@@ -1428,18 +1314,20 @@ const ExcalidrawWrapper = () => {
     }
   }, [excalidrawAPI]);
 
-  useEffect(() => {
-    if (!excalidrawAPI || (!isCollabDisabled && !collabAPI)) {
-      return;
-    }
+  // ?collaborators=<N> — populate the canvas with N static fake
+  // collaborators for exercising avatar/UserList UI without a real
+  // collab room
+  useSimulatedCollaborators(excalidrawAPI);
 
-    const loadImages = (
-      data: ResolutionType<typeof initializeScene>,
-      isInitialLoad = false,
-    ) => {
-      if (!data.scene) {
+  // ---------------------------------------------------------------------------
+  // Hoisted loadImages
+  // ---------------------------------------------------------------------------
+  const loadImages = useCallback(
+    (data: ResolutionType<typeof initializeScene>, isInitialLoad = false) => {
+      if (!data.scene || !excalidrawAPI) {
         return;
       }
+
       if (collabAPI?.isCollaborating()) {
         if (data.scene.elements) {
           collabAPI
@@ -1466,6 +1354,12 @@ const ExcalidrawWrapper = () => {
           }, [] as FileId[]) || [];
 
         if (data.isExternalScene) {
+          if (fileIds.length) {
+            // Direct Firebase call (not through FileManager), so track manually
+            FileStatusStore.updateStatuses(
+              fileIds.map((id) => [id, "loading"]),
+            );
+          }
           loadFilesFromFirebase(
             `${FIREBASE_STORAGE_PREFIXES.shareLinkFiles}/${data.id}`,
             data.key,
@@ -1477,12 +1371,18 @@ const ExcalidrawWrapper = () => {
               erroredFiles,
               elements: excalidrawAPI.getSceneElementsIncludingDeleted(),
             });
+            FileStatusStore.updateStatuses([
+              ...loadedFiles.map((f) => [f.id, "loaded"] as [FileId, "loaded"]),
+              ...[...erroredFiles.keys()].map(
+                (id) => [id, "error"] as [FileId, "error"],
+              ),
+            ]);
           });
         } else if (isInitialLoad) {
           if (fileIds.length) {
             LocalData.fileStorage
               .getFiles(fileIds)
-              .then(({ loadedFiles, erroredFiles }) => {
+              .then(async ({ loadedFiles, erroredFiles }) => {
                 if (loadedFiles.length) {
                   excalidrawAPI.addFiles(loadedFiles);
                 }
@@ -1495,10 +1395,19 @@ const ExcalidrawWrapper = () => {
           }
           // on fresh load, clear unused files from IDB (from previous
           // session)
-          LocalData.fileStorage.clearObsoleteFiles({ currentFileIds: fileIds });
+          LocalData.fileStorage.clearObsoleteFiles({
+            currentFileIds: fileIds,
+          });
         }
       }
-    };
+    },
+    [collabAPI, excalidrawAPI],
+  );
+
+  useEffect(() => {
+    if (!excalidrawAPI || (!isCollabDisabled && !collabAPI)) {
+      return;
+    }
 
     initializeScene({ collabAPI, excalidrawAPI }).then(async (data) => {
       loadImages(data, /* isInitialLoad */ true);
@@ -1623,7 +1532,7 @@ const ExcalidrawWrapper = () => {
         false,
       );
     };
-  }, [isCollabDisabled, collabAPI, excalidrawAPI, setLangCode]);
+  }, [isCollabDisabled, collabAPI, excalidrawAPI, setLangCode, loadImages]);
 
   useEffect(() => {
     const unloadHandler = (event: BeforeUnloadEvent) => {
@@ -1768,6 +1677,56 @@ const ExcalidrawWrapper = () => {
     [setShareDialogState],
   );
 
+  // ---------------------------------------------------------------------------
+  // onExport — intercepts file save to wait for pending image loads
+  // ---------------------------------------------------------------------------
+  const onExport: Required<ExcalidrawProps>["onExport"] = useCallback(
+    async function* () {
+      let snapshot = FileStatusStore.getSnapshot();
+      const { pending, total } = FileStatusStore.getPendingCount(
+        snapshot.value,
+      );
+      if (pending === 0) {
+        return;
+      }
+
+      // Yield initial progress
+      yield {
+        type: "progress",
+        progress: (total - pending) / total,
+        message: `Loading images (${total - pending}/${total})...`,
+      };
+
+      // Wait for all pending images to finish
+      while (true) {
+        snapshot = await FileStatusStore.pull(snapshot.version);
+        const { pending: nowPending, total: nowTotal } =
+          FileStatusStore.getPendingCount(snapshot.value);
+
+        yield {
+          type: "progress",
+          progress: (nowTotal - nowPending) / nowTotal,
+          message: `Loading images (${nowTotal - nowPending}/${nowTotal})...`,
+        };
+
+        if (nowPending === 0) {
+          await new Promise((r) => setTimeout(r, 500));
+          yield {
+            type: "progress",
+            message: `Preparing export...`,
+          };
+          return;
+        }
+      }
+    },
+    [],
+  );
+
+  // const onExport = () => {
+  //   return new Promise((r) => setTimeout(r, 2500));
+  //   // console.log("onExport");
+  // };
+
   // browsers generally prevent infinite self-embedding, there are
   // cases where it still happens, and while we disallow self-embedding
   // by not whitelisting our own origin, this serves as an additional guard
@@ -1834,8 +1793,11 @@ const ExcalidrawWrapper = () => {
       })}
     >
       <Excalidraw
-        excalidrawAPI={excalidrawRefCallback}
+        editingMode={isAIModeActive ? "ai" : "edit"}
+        viewportStatusFrame={viewportStatusFrame}
+        userToFollow={userToFollow}
         onChange={onChange}
+        onExport={onExport}
         initialData={initialStatePromiseRef.current.promise}
         isCollaborating={isCollaborating}
         onPointerUpdate={collabAPI?.onPointerUpdate}
@@ -1877,6 +1839,7 @@ const ExcalidrawWrapper = () => {
         handleKeyboardGlobally={true}
         autoFocus={true}
         theme={editorTheme}
+        onThemeChange={setAppTheme}
         renderTopRightUI={(isMobile) => {
           if (isMobile || !collabAPI || isCollabDisabled) {
             return null;
@@ -1905,7 +1868,11 @@ const ExcalidrawWrapper = () => {
         onLinkOpen={(element, event) => {
           if (element.link && isElementLink(element.link)) {
             event.preventDefault();
-            excalidrawAPI?.scrollToContent(element.link, { animate: true });
+            excalidrawAPI?.setViewport({
+              target: element.link,
+              fit: "scale-down",
+              animation: true,
+            });
           }
         }}
       >
@@ -1914,7 +1881,6 @@ const ExcalidrawWrapper = () => {
           isCollaborating={isCollaborating}
           isCollabEnabled={!isCollabDisabled}
           theme={appTheme}
-          setTheme={(theme) => setAppTheme(theme)}
           refresh={() => forceRefresh((prev) => !prev)}
         />
         <AppWelcomeScreen
@@ -2171,14 +2137,6 @@ const ExcalidrawWrapper = () => {
               },
             },
             {
-              ...CommandPalette.defaultItems.toggleTheme,
-              perform: () => {
-                setAppTheme(
-                  editorTheme === THEME.DARK ? THEME.LIGHT : THEME.DARK,
-                );
-              },
-            },
-            {
               label: t("labels.installPWA"),
               category: DEFAULT_CATEGORIES.app,
               predicate: () => !!pwaEvent,
@@ -2217,11 +2175,13 @@ const ExcalidrawApp = () => {
   return (
     <TopErrorBoundary>
       <Provider store={appJotaiStore}>
-        <CoordinateHighlightProvider>
-          <AIManipulationProvider>
-            <ExcalidrawWrapper />
-          </AIManipulationProvider>
-        </CoordinateHighlightProvider>
+        <ExcalidrawAPIProvider>
+          <CoordinateHighlightProvider>
+            <AIManipulationProvider>
+              <ExcalidrawWrapper />
+            </AIManipulationProvider>
+          </CoordinateHighlightProvider>
+        </ExcalidrawAPIProvider>
       </Provider>
     </TopErrorBoundary>
   );

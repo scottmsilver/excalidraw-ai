@@ -307,7 +307,11 @@ export const PDFPageSelector: React.FC<PDFPageSelectorProps> = ({
       <div className="PDFPageSelector__modal">
         <div className="PDFPageSelector__header">
           <h2 className="PDFPageSelector__title">
-            {error ? "Error Loading PDF" : loading ? "Loading PDF..." : "Select PDF Page"}
+            {error
+              ? "Error Loading PDF"
+              : loading
+              ? "Loading PDF..."
+              : "Select PDF Page"}
           </h2>
           <button
             className="PDFPageSelector__closeButton"

@@ -1,11 +1,20 @@
-import React from "react";
-import { expect } from "vitest";
+import { expect, vi } from "vitest";
+
+import { EDITOR_LS_KEYS } from "@excalidraw/common";
 
 import { Excalidraw } from "../index";
+import { EditorLocalStorage } from "../data/EditorLocalStorage";
 
 import { mockMermaidToExcalidraw } from "./helpers/mocks";
 import { getTextEditor, updateTextEditor } from "./queries/dom";
 import { render, waitFor } from "./test-utils";
+
+// Mock CodeMirror deps so the dynamic import of CodeMirrorEditor fails,
+// causing TTDDialogInput to fall back to <textarea> in tests.
+vi.mock("@codemirror/view", () => ({}));
+vi.mock("@codemirror/state", () => ({}));
+vi.mock("@codemirror/language", () => ({}));
+vi.mock("@lezer/highlight", () => ({}));
 
 mockMermaidToExcalidraw({
   mockRef: true,
@@ -77,8 +86,29 @@ mockMermaidToExcalidraw({
   },
 });
 
+const normalizeDialogSnapshot = (dialog: Element) => {
+  const dialogClone = dialog.cloneNode(true) as HTMLElement;
+
+  dialogClone
+    .querySelectorAll<HTMLElement>(".ttd-dialog-content")
+    .forEach((element) => {
+      // Radix Tabs injects this during initial mount animation prevention.
+      // Its presence depends on render timing and is unrelated to this test.
+      if (element.style.animationDuration === "0s") {
+        element.style.removeProperty("animation-duration");
+      }
+
+      if (!element.getAttribute("style")) {
+        element.removeAttribute("style");
+      }
+    });
+
+  return dialogClone.outerHTML;
+};
+
 describe("Test <MermaidToExcalidraw/>", () => {
   beforeEach(async () => {
+    EditorLocalStorage.delete(EDITOR_LS_KEYS.MERMAID_TO_EXCALIDRAW);
     await render(
       <Excalidraw
         initialData={{
@@ -93,7 +123,7 @@ describe("Test <MermaidToExcalidraw/>", () => {
   it("should open mermaid popup when active tool is mermaid", async () => {
     const dialog = document.querySelector(".ttd-dialog")!;
     await waitFor(() => expect(dialog.querySelector("canvas")).not.toBeNull());
-    expect(dialog.outerHTML).toMatchSnapshot();
+    expect(normalizeDialogSnapshot(dialog)).toMatchSnapshot();
   });
 
   it("should show error in preview when mermaid library throws error", async () => {

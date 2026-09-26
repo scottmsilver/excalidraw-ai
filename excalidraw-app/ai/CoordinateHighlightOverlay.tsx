@@ -10,6 +10,7 @@
  */
 
 import React from "react";
+import { useExcalidrawStateValue } from "@excalidraw/excalidraw";
 
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
@@ -37,9 +38,15 @@ export const CoordinateHighlightOverlay: React.FC<
   const coordContext = useCoordinateHighlightOptional();
 
   // Get app state for coordinate transformation
-  const appState = excalidrawAPI?.getAppState();
+  const appState = useExcalidrawStateValue([
+    "zoom",
+    "scrollX",
+    "scrollY",
+    "offsetLeft",
+    "offsetTop",
+  ]);
 
-  if (!coordContext?.highlightedCoord || !appState) {
+  if (!excalidrawAPI || !coordContext?.highlightedCoord || !appState) {
     return null;
   }
 

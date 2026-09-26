@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 
 import "./ThinkingOverlay.scss";
 
@@ -114,7 +114,9 @@ export const ThinkingOverlay: React.FC<ThinkingOverlayProps> = ({
   const prevImageCountRef = useRef(0);
 
   // Show chooser panel when we have images (during thinking or reviewing)
-  const showChooserPanel = iterationImages.length > 0 && (status === "thinking" || status === "reviewing");
+  const showChooserPanel =
+    iterationImages.length > 0 &&
+    (status === "thinking" || status === "reviewing");
 
   // Track new images arriving and auto-select the newest one
   useEffect(() => {
@@ -127,14 +129,16 @@ export const ThinkingOverlay: React.FC<ThinkingOverlayProps> = ({
       for (let i = prevCount; i < newCount; i++) {
         newImageIndices.push({ index: i, timestamp: Date.now() });
       }
-      setNewImages(prev => [...prev, ...newImageIndices]);
+      setNewImages((prev) => [...prev, ...newImageIndices]);
 
       // Auto-select the newest image
       setReviewIndex(newCount - 1);
 
       // Clear animation state after animation completes
       const timer = setTimeout(() => {
-        setNewImages(prev => prev.filter(img => Date.now() - img.timestamp < 800));
+        setNewImages((prev) =>
+          prev.filter((img) => Date.now() - img.timestamp < 800),
+        );
       }, 800);
 
       prevImageCountRef.current = newCount;
@@ -338,7 +342,11 @@ export const ThinkingOverlay: React.FC<ThinkingOverlayProps> = ({
             alt={`AI result ${reviewIndex + 1} of ${iterationImages.length}`}
             className={`thinking-overlay__image thinking-overlay__image--reviewing thinking-overlay__image--ai-result${
               imageStyle ? " thinking-overlay__image--positioned" : ""
-            }${newImages.some(img => img.index === reviewIndex) ? " thinking-overlay__image--new" : ""}`}
+            }${
+              newImages.some((img) => img.index === reviewIndex)
+                ? " thinking-overlay__image--new"
+                : ""
+            }`}
             style={{
               ...imageStyle,
               zIndex: 20,
@@ -347,23 +355,33 @@ export const ThinkingOverlay: React.FC<ThinkingOverlayProps> = ({
           />
 
           {/* Chooser panel (z-index 100) */}
-          <div className={`thinking-overlay__review-panel${status === "thinking" ? " thinking-overlay__review-panel--collecting" : ""}`}>
+          <div
+            className={`thinking-overlay__review-panel${
+              status === "thinking"
+                ? " thinking-overlay__review-panel--collecting"
+                : ""
+            }`}
+          >
             {/* Thumbnail strip - shows all iteration images */}
             <div className="thinking-overlay__thumbnails">
               {iterationImages.map((imgSrc, index) => {
-                const isNew = newImages.some(img => img.index === index);
+                const isNew = newImages.some((img) => img.index === index);
                 const isSelected = index === reviewIndex;
                 return (
                   <button
                     key={index}
                     type="button"
-                    className={`thinking-overlay__thumbnail${isSelected ? " thinking-overlay__thumbnail--selected" : ""}${isNew ? " thinking-overlay__thumbnail--new" : ""}`}
+                    className={`thinking-overlay__thumbnail${
+                      isSelected ? " thinking-overlay__thumbnail--selected" : ""
+                    }${isNew ? " thinking-overlay__thumbnail--new" : ""}`}
                     onClick={() => setReviewIndex(index)}
                     aria-label={`View iteration ${index + 1}`}
                     aria-pressed={isSelected}
                   >
                     <img src={imgSrc} alt={`Iteration ${index + 1}`} />
-                    {isNew && <div className="thinking-overlay__thumbnail-sparkle" />}
+                    {isNew && (
+                      <div className="thinking-overlay__thumbnail-sparkle" />
+                    )}
                   </button>
                 );
               })}
@@ -389,9 +407,7 @@ export const ThinkingOverlay: React.FC<ThinkingOverlayProps> = ({
                 className="thinking-overlay__comparison-slider"
                 aria-label="Compare original and AI result"
               />
-              <span className="thinking-overlay__comparison-label">
-                AI
-              </span>
+              <span className="thinking-overlay__comparison-label">AI</span>
             </div>
 
             {/* Accept/Reject buttons - shown when images are available */}
