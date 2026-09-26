@@ -4,6 +4,6 @@
     "rootDir": "../",
     "outDir": "./dist/types"
   },
-  "include": ["**/*"],
+  "include": ["**/*", "../element/src/apca-w3.d.ts"],
   "exclude": ["**/*.test.*", "tests", "types", "examples", "dist"]
 }
