@@ -85,19 +85,12 @@ describe("AI integration with the upstream editor", () => {
       act(() => window.h.app.refreshEditorInterface());
       API.setAppState({ name: "AI layout verification" });
       expect(window.h.app.editorInterface.formFactor).toBe(formFactor);
-      if (formFactor === "phone") {
-        // Deployed 30885a90 only exposes the AI tunnel in desktop LayerUI.
-        // Keep that limitation explicit instead of testing a stale desktop UI.
-        await waitFor(() => {
-          expect(document.querySelector(".mobile-toolbar")).not.toBeNull();
-          expect(
-            screen.queryByRole("button", { name: "AI marker" }),
-          ).toBeNull();
-        });
-        return;
-      }
       const marker = await screen.findByRole("button", { name: "AI marker" });
-      expect(marker.closest(".App-toolbar")).not.toBeNull();
+      expect(
+        marker.closest(
+          formFactor === "phone" ? ".mobile-toolbar" : ".App-toolbar",
+        ),
+      ).not.toBeNull();
       fireEvent.click(marker);
       expect(marker).toHaveAttribute("aria-pressed", "true");
       expect(screen.getAllByRole("button", { name: "AI marker" })).toHaveLength(
