@@ -1,8 +1,9 @@
 import { pointFrom } from "@excalidraw/math";
 
+import type { LocalPoint } from "@excalidraw/math";
+
 import { pointToPerimeterRatio } from "./callout";
 
-import type { LocalPoint } from "@excalidraw/math";
 import type { ExcalidrawCalloutElement } from "./types";
 
 type ScenePoint = readonly [number, number];
