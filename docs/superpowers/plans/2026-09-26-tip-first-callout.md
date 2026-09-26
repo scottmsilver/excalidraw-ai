@@ -15,6 +15,7 @@
 ### Task 1: Pure placement geometry
 
 **Files:**
+
 - Create: `packages/element/src/calloutCreation.ts`
 - Test: `packages/element/tests/calloutCreation.test.ts`
 
@@ -26,6 +27,7 @@
 ### Task 2: Temporary preview and persistent instruction
 
 **Files:**
+
 - Create: `packages/excalidraw/components/CalloutCreationPreview.tsx`
 - Create: `packages/excalidraw/components/CalloutCreationPreview.scss`
 - Modify: `packages/excalidraw/components/App.tsx` (render the overlay beside `InteractiveCanvas`)
@@ -39,6 +41,7 @@
 ### Task 3: Connect two pointer gestures to App
 
 **Files:**
+
 - Modify: `packages/excalidraw/components/App.tsx` at callout pointer down, move, up, tool switch, Escape, and pointer cancellation paths
 - Modify: `packages/excalidraw/tests/callout.test.tsx`
 
@@ -50,6 +53,7 @@
 ### Task 4: Cancellation and regression verification
 
 **Files:**
+
 - Modify: `packages/excalidraw/components/App.tsx`
 - Modify: `packages/excalidraw/tests/callout.test.tsx`
 
@@ -61,6 +65,7 @@
 ### Task 5: Integrate and deploy
 
 **Files:**
+
 - Modify: root `excalidraw-ui` submodule pointer after UI commit
 
 - [ ] **Step 1: Push the short-lived UI branch, open a PR to `master`, wait for relevant CI, squash merge it, and delete the branch.**
