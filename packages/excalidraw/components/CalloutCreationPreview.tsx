@@ -3,7 +3,7 @@ import {
   getLineHeight,
   sceneCoordsToViewportCoords,
 } from "@excalidraw/common";
-import { getApproxMinLineHeight } from "@excalidraw/element";
+import { getApproxMinLineHeight, getCornerRadius } from "@excalidraw/element";
 import { getCalloutPlacement } from "@excalidraw/element/calloutCreation";
 import { perimeterRatioToPoint } from "@excalidraw/element/callout";
 
@@ -51,17 +51,24 @@ export const CalloutCreationPreview = ({
   };
   const tip = toLocal(creation.tip);
   let end = toLocal(creation.leaderEnd);
-  let box: { x: number; y: number; width: number; height: number } | null =
-    null;
+  let box: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    radius: number;
+  } | null = null;
   if (creation.phase === "box" && creation.boxStart && creation.boxEnd) {
+    const roundness =
+      appState.currentItemRoundness === "round"
+        ? ({ type: ROUNDNESS.ADAPTIVE_RADIUS } as const)
+        : null;
     const placement = getCalloutPlacement(
       creation.tip,
       creation.boxStart,
       creation.boxEnd,
       !!creation.dragged,
-      appState.currentItemRoundness === "round"
-        ? { type: ROUNDNESS.ADAPTIVE_RADIUS }
-        : null,
+      roundness,
       getApproxMinLineHeight(
         appState.currentItemFontSize,
         getLineHeight(appState.currentItemFontFamily),
@@ -71,9 +78,7 @@ export const CalloutCreationPreview = ({
       placement.tailAttachment,
       placement.width,
       placement.height,
-      appState.currentItemRoundness === "round"
-        ? { type: ROUNDNESS.ADAPTIVE_RADIUS }
-        : null,
+      roundness,
     );
     end = toLocal([placement.x + attachment[0], placement.y + attachment[1]]);
     const topLeft = toLocal([placement.x, placement.y]);
@@ -82,6 +87,10 @@ export const CalloutCreationPreview = ({
       y: topLeft[1],
       width: placement.width * appState.zoom.value,
       height: placement.height * appState.zoom.value,
+      radius:
+        getCornerRadius(Math.min(placement.width, placement.height), {
+          roundness,
+        }) * appState.zoom.value,
     };
   }
 
@@ -121,7 +130,7 @@ export const CalloutCreationPreview = ({
             y={box.y}
             width={box.width}
             height={box.height}
-            rx="12"
+            rx={box.radius}
             fill="none"
             stroke="var(--color-primary)"
             strokeWidth="2"
@@ -131,7 +140,7 @@ export const CalloutCreationPreview = ({
       </svg>
       {creation.phase === "awaiting-box" && (
         <div className="callout-creation-hint">
-          Arrow set. Tap where the box bottom should be, or drag to size.
+          Arrow set. Press where the arrow joins the box; drag to size.
         </div>
       )}
     </div>

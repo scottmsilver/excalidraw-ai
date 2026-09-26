@@ -10786,8 +10786,8 @@ class App extends React.Component<AppProps, AppState> {
       this.setCalloutCreation({
         ...this.calloutCreation,
         phase: "box",
-        boxStart: [gridX, gridY],
-        boxEnd: [gridX, gridY],
+        boxStart: [pointerDownState.origin.x, pointerDownState.origin.y],
+        boxEnd: [pointerDownState.origin.x, pointerDownState.origin.y],
         dragged: false,
         pointerId,
         clientStart,
@@ -10973,7 +10973,7 @@ class App extends React.Component<AppProps, AppState> {
             : false;
           this.setCalloutCreation({
             ...calloutCreation,
-            boxEnd: [x, y],
+            boxEnd: [pointerCoords.x, pointerCoords.y],
             dragged,
           });
         }
@@ -12289,7 +12289,7 @@ class App extends React.Component<AppProps, AppState> {
         } else if (calloutCreation.phase === "box") {
           this.finishCalloutCreation({
             ...calloutCreation,
-            boxEnd: [x, y],
+            boxEnd: [coords.x, coords.y],
             dragged: calloutCreation.clientStart
               ? Math.hypot(
                   childEvent.clientX - calloutCreation.clientStart[0],
