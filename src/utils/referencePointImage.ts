@@ -23,7 +23,7 @@ export async function addReferenceMarkers(
     context.drawImage(bitmap, 0, 0);
 
     for (const point of points) {
-      const colors = MARKER_COLORS[point.index % MARKER_COLORS.length];
+      const colors = MARKER_COLORS;
       context.beginPath();
       context.arc(point.x, point.y, 14, 0, Math.PI * 2);
       context.fillStyle = colors.bg;
