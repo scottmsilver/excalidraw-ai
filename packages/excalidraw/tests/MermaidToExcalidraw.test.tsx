@@ -1,6 +1,9 @@
 import { expect, vi } from "vitest";
 
+import { EDITOR_LS_KEYS } from "@excalidraw/common";
+
 import { Excalidraw } from "../index";
+import { EditorLocalStorage } from "../data/EditorLocalStorage";
 
 import { mockMermaidToExcalidraw } from "./helpers/mocks";
 import { getTextEditor, updateTextEditor } from "./queries/dom";
@@ -105,6 +108,7 @@ const normalizeDialogSnapshot = (dialog: Element) => {
 
 describe("Test <MermaidToExcalidraw/>", () => {
   beforeEach(async () => {
+    EditorLocalStorage.delete(EDITOR_LS_KEYS.MERMAID_TO_EXCALIDRAW);
     await render(
       <Excalidraw
         initialData={{
