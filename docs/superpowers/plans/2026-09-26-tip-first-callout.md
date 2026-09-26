@@ -63,6 +63,7 @@
 **Files:**
 - Modify: root `excalidraw-ui` submodule pointer after UI commit
 
-- [ ] **Step 1: Push UI `master`, commit/push the root `main` submodule pointer, and check CI.**
-- [ ] **Step 2: Deploy Fly from the committed UI head with `VITE_APP_GIT_SHA` and check `/health` and machine image.**
-- [ ] **Step 3: Confirm both checkouts are clean and each repo has only its intended worktree.**
+- [ ] **Step 1: Push the short-lived UI branch, open a PR to `master`, wait for relevant CI, squash merge it, and delete the branch.**
+- [ ] **Step 2: Switch this UI checkout to the new `master`; commit/push the root `main` submodule pointer and check CI.**
+- [ ] **Step 3: Deploy Fly from the committed UI head with `VITE_APP_GIT_SHA` and check `/health` and machine image.**
+- [ ] **Step 4: Confirm both checkouts are clean and each repo has only its intended worktree.**
