@@ -273,6 +273,8 @@ import {
 
 import { getAutoContrastModes } from "@excalidraw/element/autoContrast";
 
+import { getCalloutPlacement } from "@excalidraw/element/calloutCreation";
+
 import type { GlobalPoint, LocalPoint, Radians } from "@excalidraw/math";
 
 import type {
@@ -471,6 +473,11 @@ import { StaticCanvas, InteractiveCanvas } from "./canvases";
 import NewElementCanvas from "./canvases/NewElementCanvas";
 import { isPointHittingLink } from "./hyperlink/helpers";
 import { CursorHint, CursorHints } from "./CursorHint";
+import {
+  CalloutCreationPreview,
+  calloutCreationAtom,
+  type CalloutCreation,
+} from "./CalloutCreationPreview";
 import { MagicIcon, copyIcon, fullscreenIcon } from "./icons";
 import { AppStateObserver, type OnStateChange } from "./AppStateObserver";
 
@@ -766,6 +773,12 @@ class App extends React.Component<AppProps, AppState> {
   eraserTrail = new EraserTrail(this);
   lassoTrail = new LassoTrail(this);
   cursorHints = new CursorHints(this);
+  private calloutCreation: CalloutCreation | null = null;
+
+  private setCalloutCreation = (creation: CalloutCreation | null) => {
+    this.calloutCreation = creation;
+    this.updateEditorAtom(calloutCreationAtom, creation);
+  };
 
   onChangeEmitter = new Emitter<
     [
@@ -2519,6 +2532,7 @@ class App extends React.Component<AppProps, AppState> {
                               this.drawShape.trail,
                             ]}
                           />
+                          <CalloutCreationPreview appState={this.state} />
                           {this.isDefaultUIEnabled() && <CursorHint />}
                           {this.isDefaultUIEnabled() &&
                             selectedElements.length === 1 &&
@@ -3871,6 +3885,7 @@ class App extends React.Component<AppProps, AppState> {
   }
 
   public componentWillUnmount() {
+    editorJotaiStore.set(calloutCreationAtom, null);
     // we're recreating the api object reference so that the
     // <ExcalidrawAPIContext.Provider/> picks up on it
     this.api = { ...this.api, isDestroyed: true };
@@ -4216,6 +4231,9 @@ class App extends React.Component<AppProps, AppState> {
   private autoContrastStyles = new AutoContrastController();
 
   componentDidUpdate(prevProps: AppProps, prevState: AppState) {
+    if (this.state.activeTool.type !== "callout" && this.calloutCreation) {
+      this.setCalloutCreation(null);
+    }
     // must be updated *before* state change listeners are triggered below
     if (!this._initialized && !this.state.isLoading) {
       this._initialized = true;
@@ -5520,6 +5538,11 @@ class App extends React.Component<AppProps, AppState> {
 
         // Shape switching
         if (event.key === KEYS.ESCAPE) {
+          if (this.calloutCreation) {
+            this.setCalloutCreation(null);
+            event.preventDefault();
+            return;
+          }
           this.updateEditorAtom(convertElementTypePopupAtom, null);
         } else if (
           event.key === KEYS.TAB &&
@@ -6166,6 +6189,9 @@ class App extends React.Component<AppProps, AppState> {
             lastActiveTool: this.state.activeTool,
           })
         : updateActiveTool(this.state, tool);
+    if (nextActiveTool.type !== "callout" && this.calloutCreation) {
+      this.setCalloutCreation(null);
+    }
     if (nextActiveTool.type === "hand") {
       this.cursor.set(CURSOR_TYPE.GRAB);
     } else if (!isHoldingSpace) {
@@ -8735,6 +8761,9 @@ class App extends React.Component<AppProps, AppState> {
 
     // don't select while panning
     if (gesture.pointers.size > 1) {
+      if (this.calloutCreation) {
+        this.setCalloutCreation(null);
+      }
       return;
     }
 
@@ -8985,6 +9014,9 @@ class App extends React.Component<AppProps, AppState> {
     if (!this.state.viewModeEnabled || this.isActiveToolPointerCapturing()) {
       this.ownerWindow.addEventListener(EVENT.POINTER_MOVE, onPointerMove);
       this.ownerWindow.addEventListener(EVENT.POINTER_UP, onPointerUp);
+      if (this.state.activeTool.type === "callout") {
+        this.ownerWindow.addEventListener("pointercancel", onPointerUp);
+      }
       this.ownerWindow.addEventListener(EVENT.KEYDOWN, onKeyDown);
       this.ownerWindow.addEventListener(EVENT.KEYUP, onKeyUp);
       pointerDownState.eventListeners.onMove = onPointerMove;
@@ -10743,15 +10775,56 @@ class App extends React.Component<AppProps, AppState> {
         : this.getEffectiveGridSize(),
     );
 
-    const topLayerFrame = this.getTopLayerFrameAtSceneCoords({
-      x: gridX,
-      y: gridY,
-    });
+    const pointerId = this.lastPointerDownEvent?.pointerId;
+    const clientStart = this.lastPointerDownEvent
+      ? ([
+          this.lastPointerDownEvent.clientX,
+          this.lastPointerDownEvent.clientY,
+        ] as const)
+      : undefined;
+    if (this.calloutCreation?.phase === "awaiting-box") {
+      this.setCalloutCreation({
+        ...this.calloutCreation,
+        phase: "box",
+        boxStart: [gridX, gridY],
+        boxEnd: [gridX, gridY],
+        dragged: false,
+        pointerId,
+        clientStart,
+      });
+    } else {
+      this.setCalloutCreation({
+        phase: "leader",
+        tip: [gridX, gridY],
+        leaderEnd: [gridX, gridY],
+        pointerId,
+        clientStart,
+      });
+    }
+  };
 
+  private finishCalloutCreation = (creation: CalloutCreation) => {
+    if (!creation.boxStart || !creation.boxEnd) {
+      return;
+    }
+    const roundness =
+      this.state.currentItemRoundness === "round"
+        ? ({ type: ROUNDNESS.ADAPTIVE_RADIUS } as const)
+        : null;
+    const placement = getCalloutPlacement(
+      creation.tip,
+      creation.boxStart,
+      creation.boxEnd,
+      !!creation.dragged,
+      roundness,
+    );
+    const topLayerFrame = this.getTopLayerFrameAtSceneCoords({
+      x: placement.x,
+      y: placement.y,
+    });
     const element = newCalloutElement({
       type: "callout",
-      x: gridX,
-      y: gridY,
+      ...placement,
       strokeColor: this.state.currentItemStrokeColor,
       backgroundColor: this.state.currentItemBackgroundColor,
       fillStyle: this.state.currentItemFillStyle,
@@ -10759,21 +10832,34 @@ class App extends React.Component<AppProps, AppState> {
       strokeStyle: this.state.currentItemStrokeStyle,
       roughness: this.state.currentItemRoughness,
       opacity: this.state.currentItemOpacity,
-      roundness:
-        this.state.currentItemRoundness === "round"
-          ? { type: ROUNDNESS.ADAPTIVE_RADIUS }
-          : null,
+      roundness,
       locked: false,
       frameId: topLayerFrame ? topLayerFrame.id : null,
     });
-
+    this.setCalloutCreation(null);
     this.scene.insertElement(element);
-
-    this.setState({
-      multiElement: null,
-      newElement: element,
-      calloutSelectionMode: "box",
-    });
+    this.store.scheduleCapture();
+    const locked = this.isToolLocked();
+    this.setState(
+      {
+        newElement: null,
+        multiElement: null,
+        calloutSelectionMode: "box",
+        selectedElementIds: locked ? {} : { [element.id]: true },
+        activeTool: locked
+          ? this.state.activeTool
+          : updateActiveTool(this.state, {
+              type: this.state.preferredSelectionTool.type,
+            }),
+      },
+      () => {
+        this.startTextEditing({
+          sceneX: element.x + element.width / 2,
+          sceneY: element.y + element.height / 2,
+          container: element,
+        });
+      },
+    );
   };
 
   private maybeCacheReferenceSnapPoints(
@@ -10856,6 +10942,39 @@ class App extends React.Component<AppProps, AppState> {
         return;
       }
       const pointerCoords = viewportCoordsToSceneCoords(event, this.state);
+
+      const calloutCreation = this.calloutCreation;
+      if (
+        calloutCreation &&
+        this.state.activeTool.type === "callout" &&
+        calloutCreation.pointerId === event.pointerId &&
+        calloutCreation.phase !== "awaiting-box"
+      ) {
+        const [x, y] = getGridPoint(
+          pointerCoords.x,
+          pointerCoords.y,
+          event[KEYS.CTRL_OR_CMD] ? null : this.getEffectiveGridSize(),
+        );
+        if (calloutCreation.phase === "leader") {
+          this.setCalloutCreation({
+            ...calloutCreation,
+            leaderEnd: [x, y],
+          });
+        } else {
+          const dragged = calloutCreation.clientStart
+            ? Math.hypot(
+                event.clientX - calloutCreation.clientStart[0],
+                event.clientY - calloutCreation.clientStart[1],
+              ) > DRAGGING_THRESHOLD
+            : false;
+          this.setCalloutCreation({
+            ...calloutCreation,
+            boxEnd: [x, y],
+            dragged,
+          });
+        }
+        return;
+      }
 
       if (this.state.activeLockedId) {
         this.setState({
@@ -12118,6 +12237,10 @@ class App extends React.Component<AppProps, AppState> {
         pointerDownState.eventListeners.onUp!,
       );
       this.ownerWindow.removeEventListener(
+        "pointercancel",
+        pointerDownState.eventListeners.onUp!,
+      );
+      this.ownerWindow.removeEventListener(
         EVENT.KEYDOWN,
         pointerDownState.eventListeners.onKeyDown!,
       );
@@ -12132,6 +12255,47 @@ class App extends React.Component<AppProps, AppState> {
         pointerDownState,
         childEvent,
       );
+
+      const calloutCreation = this.calloutCreation;
+      if (
+        calloutCreation &&
+        calloutCreation.pointerId === childEvent.pointerId
+      ) {
+        if (
+          childEvent.type !== "pointerup" ||
+          this.state.activeTool.type !== "callout"
+        ) {
+          this.setCalloutCreation(null);
+          return;
+        }
+        const coords = viewportCoordsToSceneCoords(childEvent, this.state);
+        const [x, y] = getGridPoint(
+          coords.x,
+          coords.y,
+          childEvent[KEYS.CTRL_OR_CMD] ? null : this.getEffectiveGridSize(),
+        );
+        if (calloutCreation.phase === "leader") {
+          this.setCalloutCreation({
+            ...calloutCreation,
+            phase: "awaiting-box",
+            leaderEnd: [x, y],
+            pointerId: undefined,
+            clientStart: undefined,
+          });
+        } else if (calloutCreation.phase === "box") {
+          this.finishCalloutCreation({
+            ...calloutCreation,
+            boxEnd: [x, y],
+            dragged: calloutCreation.clientStart
+              ? Math.hypot(
+                  childEvent.clientX - calloutCreation.clientStart[0],
+                  childEvent.clientY - calloutCreation.clientStart[1],
+                ) > DRAGGING_THRESHOLD
+              : false,
+          });
+        }
+        return;
+      }
 
       if (newElement?.type === "freedraw") {
         const pointerCoords = viewportCoordsToSceneCoords(

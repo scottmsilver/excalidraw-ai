@@ -27,6 +27,7 @@ import { API } from "./helpers/api";
 import { getTextEditor, updateTextEditor } from "./queries/dom";
 import { Keyboard, Pointer, UI } from "./helpers/ui";
 import { act, render, screen, unmountComponent } from "./test-utils";
+import { GlobalTestState } from "./test-utils";
 
 import type { PointerDownState } from "../types";
 
@@ -42,12 +43,144 @@ describe("restored callout tool", () => {
     API.setAppState({ height: 768, width: MQ_MIN_WIDTH_DESKTOP });
   });
 
+  it("keeps the arrow as a preview and explains box placement after the first release", () => {
+    Keyboard.keyPress(KEYS.C);
+    mouse.downAt(100, 100);
+    mouse.moveTo(180, 160);
+    mouse.up();
+
+    expect(getNonDeletedElements(h.elements)).toHaveLength(0);
+    expect(
+      screen.getByText("Arrow set. Drag to place the callout."),
+    ).toBeVisible();
+    expect(screen.getByTestId("callout-creation-leader")).toBeVisible();
+    expect(h.state.activeTool.type).toBe("callout");
+  });
+
+  it("places a box with a reverse drag while keeping the arrow tip fixed", async () => {
+    Keyboard.keyPress(KEYS.C);
+    mouse.downAt(100, 100);
+    mouse.moveTo(190, 150);
+    mouse.up();
+    mouse.downAt(400, 300);
+    mouse.moveTo(240, 200);
+    mouse.up();
+
+    const callout = h.elements[0] as ReturnType<typeof newCalloutElement>;
+    expect(callout).toMatchObject({ x: 240, y: 200, width: 160, height: 100 });
+    expect(getCalloutTailTipGlobalCoords(callout)).toEqual([100, 100]);
+    expect(
+      screen.queryByText("Arrow set. Drag to place the callout."),
+    ).toBeNull();
+    Keyboard.exitTextEditor(await getTextEditor());
+  });
+
+  it("cancels the preview with Escape before or during box placement", () => {
+    Keyboard.keyPress(KEYS.C);
+    mouse.downAt(100, 100);
+    mouse.up();
+    Keyboard.keyPress(KEYS.ESCAPE);
+    expect(
+      screen.queryByText("Arrow set. Drag to place the callout."),
+    ).toBeNull();
+    expect(h.elements).toHaveLength(0);
+
+    mouse.downAt(100, 100);
+    mouse.up();
+    mouse.downAt(200, 200);
+    mouse.moveTo(300, 300);
+    Keyboard.keyPress(KEYS.ESCAPE);
+    mouse.up();
+    expect(h.elements).toHaveLength(0);
+  });
+
+  it("cancels a pointer that the browser takes over", () => {
+    Keyboard.keyPress(KEYS.C);
+    mouse.downAt(100, 100);
+    fireEvent.pointerCancel(GlobalTestState.interactiveCanvas, {
+      pointerId: 1,
+      pointerType: "mouse",
+      clientX: 100,
+      clientY: 100,
+    });
+    expect(h.elements).toHaveLength(0);
+    expect(screen.queryByTestId("callout-creation-leader")).toBeNull();
+  });
+
+  it("cancels when switching tools while waiting for the box", () => {
+    Keyboard.keyPress(KEYS.C);
+    mouse.downAt(100, 100);
+    mouse.up();
+    act(() => h.app.setActiveTool({ type: "selection" }));
+    expect(screen.queryByTestId("callout-creation-leader")).toBeNull();
+    expect(h.elements).toHaveLength(0);
+  });
+
+  it("uses a default box for a second click", async () => {
+    Keyboard.keyPress(KEYS.C);
+    mouse.clickAt(100, 100);
+    mouse.clickAt(240, 200);
+    const callout = h.elements[0] as ReturnType<typeof newCalloutElement>;
+    expect(callout).toMatchObject({ x: 240, y: 200, width: 160, height: 100 });
+    expect(getCalloutTailTipGlobalCoords(callout)).toEqual([100, 100]);
+    Keyboard.exitTextEditor(await getTextEditor());
+  });
+
+  it("starts either gesture over an existing shape", async () => {
+    UI.createElement("rectangle", { x: 80, y: 80, width: 180, height: 140 });
+    Keyboard.keyPress(KEYS.C);
+    mouse.downAt(100, 100);
+    mouse.moveTo(180, 150);
+    mouse.up();
+    mouse.downAt(140, 120);
+    mouse.moveTo(340, 250);
+    mouse.up();
+    expect(
+      getNonDeletedElements(h.elements).filter(
+        (element) => element.type === "callout",
+      ),
+    ).toHaveLength(1);
+    Keyboard.exitTextEditor(await getTextEditor());
+  });
+
+  it("creates one undoable callout only after the second release", async () => {
+    Keyboard.keyPress(KEYS.C);
+    mouse.downAt(100, 100);
+    mouse.moveTo(190, 150);
+    mouse.up();
+    expect(h.elements).toHaveLength(0);
+    mouse.downAt(240, 200);
+    mouse.moveTo(400, 300);
+    mouse.up();
+    Keyboard.exitTextEditor(await getTextEditor());
+    expect(getNonDeletedElements(h.elements)).toHaveLength(1);
+    Keyboard.undo();
+    expect(getNonDeletedElements(h.elements)).toHaveLength(0);
+  });
+
+  it("cancels when a second touch begins during placement", () => {
+    const firstTouch = new Pointer("touch", 31);
+    const secondTouch = new Pointer("touch", 32);
+    Keyboard.keyPress(KEYS.C);
+    firstTouch.downAt(100, 100);
+    firstTouch.up();
+    firstTouch.downAt(240, 200);
+    secondTouch.downAt(260, 220);
+    firstTouch.up();
+    secondTouch.up();
+    expect(h.elements).toHaveLength(0);
+    expect(screen.queryByTestId("callout-creation-leader")).toBeNull();
+  });
+
   it("exposes the toolbar tool and creates a callout with C", async () => {
     expect(screen.getByTestId("toolbar-callout")).toBeTruthy();
     Keyboard.keyPress(KEYS.C);
     expect(h.state.activeTool.type).toBe("callout");
     mouse.downAt(100, 100);
     mouse.moveTo(260, 180);
+    mouse.up();
+    mouse.downAt(260, 180);
+    mouse.moveTo(420, 260);
     mouse.up();
     Keyboard.exitTextEditor(await getTextEditor());
     expect(getNonDeletedElements(h.elements)).toHaveLength(1);
@@ -59,8 +192,8 @@ describe("restored callout tool", () => {
     expect(restored).toHaveLength(1);
     expect(restored[0]).toMatchObject({
       type: "callout",
-      x: 100,
-      y: 100,
+      x: 260,
+      y: 180,
       width: 160,
       height: 80,
     });
@@ -77,6 +210,9 @@ describe("restored callout tool", () => {
       API.setAppState({ activeTool: { ...h.state.activeTool, locked } });
       mouse.downAt(100, 100);
       mouse.moveTo(260, 180);
+      mouse.up();
+      mouse.downAt(260, 180);
+      mouse.moveTo(420, 260);
       mouse.up();
       const editor = await getTextEditor();
       expect(document.activeElement).toBe(editor);
@@ -97,6 +233,8 @@ describe("restored callout tool", () => {
     Keyboard.keyPress(KEYS.C);
     mouse.downAt(100, 100);
     mouse.up();
+    mouse.downAt(220, 180);
+    mouse.up();
     expect(document.activeElement).toBe(await getTextEditor());
     expect(h.state.editingTextElement?.containerId).toBe(h.elements[0].id);
   });
@@ -106,6 +244,9 @@ describe("restored callout tool", () => {
     Keyboard.keyPress(KEYS.C);
     mouse.downAt(300, 300);
     mouse.moveTo(460, 380);
+    mouse.up();
+    mouse.downAt(460, 380);
+    mouse.moveTo(620, 460);
     mouse.up();
     expect(h.state.calloutSelectionMode).toBe("box");
   });
@@ -777,6 +918,9 @@ describe("restored callout tool", () => {
     mouse.downAt(300, 300);
     mouse.moveTo(460, 380);
     mouse.up();
+    mouse.downAt(460, 380);
+    mouse.moveTo(620, 460);
+    mouse.up();
     Keyboard.exitTextEditor(await getTextEditor());
     const callout = h.elements[0] as ReturnType<typeof newCalloutElement>;
     const before = {
@@ -847,6 +991,9 @@ describe("restored callout tool", () => {
     Keyboard.keyPress(KEYS.C);
     mouse.downAt(100, 100);
     mouse.moveTo(260, 180);
+    mouse.up();
+    mouse.downAt(260, 180);
+    mouse.moveTo(420, 260);
     mouse.up();
     const svg = await exportToSvg({
       elements: getNonDeletedElements(h.elements),
