@@ -51,7 +51,9 @@ describe("restored callout tool", () => {
 
     expect(getNonDeletedElements(h.elements)).toHaveLength(0);
     expect(
-      screen.getByText("Arrow set. Drag to place the callout."),
+      screen.getByText(
+        "Arrow set. Tap where the box bottom should be, or drag to size.",
+      ),
     ).toBeVisible();
     expect(screen.getByTestId("callout-creation-leader")).toBeVisible();
     expect(h.state.activeTool.type).toBe("callout");
@@ -70,7 +72,9 @@ describe("restored callout tool", () => {
     expect(callout).toMatchObject({ x: 240, y: 200, width: 160, height: 100 });
     expect(getCalloutTailTipGlobalCoords(callout)).toEqual([100, 100]);
     expect(
-      screen.queryByText("Arrow set. Drag to place the callout."),
+      screen.queryByText(
+        "Arrow set. Tap where the box bottom should be, or drag to size.",
+      ),
     ).toBeNull();
     Keyboard.exitTextEditor(await getTextEditor());
   });
@@ -81,7 +85,9 @@ describe("restored callout tool", () => {
     mouse.up();
     Keyboard.keyPress(KEYS.ESCAPE);
     expect(
-      screen.queryByText("Arrow set. Drag to place the callout."),
+      screen.queryByText(
+        "Arrow set. Tap where the box bottom should be, or drag to size.",
+      ),
     ).toBeNull();
     expect(h.elements).toHaveLength(0);
 
@@ -116,13 +122,68 @@ describe("restored callout tool", () => {
     expect(h.elements).toHaveLength(0);
   });
 
-  it("uses a default box for a second click", async () => {
+  it("centers a default box above the second click", async () => {
     Keyboard.keyPress(KEYS.C);
     mouse.clickAt(100, 100);
     mouse.clickAt(240, 200);
     const callout = h.elements[0] as ReturnType<typeof newCalloutElement>;
-    expect(callout).toMatchObject({ x: 240, y: 200, width: 160, height: 100 });
+    expect(callout).toMatchObject({ x: 160, y: 100, width: 160, height: 100 });
     expect(getCalloutTailTipGlobalCoords(callout)).toEqual([100, 100]);
+    Keyboard.exitTextEditor(await getTextEditor());
+  });
+
+  it("keeps the scene and places the box on the second touch tap", async () => {
+    const touch = new Pointer("touch", 41);
+    const existing = UI.createElement("rectangle", {
+      x: 500,
+      y: 500,
+      width: 100,
+      height: 100,
+    }).get();
+    Keyboard.keyPress(KEYS.C);
+    touch.clickAt(100, 100);
+    expect(getNonDeletedElements(h.elements)).toHaveLength(1);
+    touch.clickAt(240, 200);
+    expect(
+      h.elements.find((element) => element.id === existing.id),
+    ).toMatchObject({
+      x: 500,
+      y: 500,
+      width: 100,
+      height: 100,
+    });
+    expect(
+      getNonDeletedElements(h.elements).filter(
+        (element) => element.type === "callout",
+      ),
+    ).toHaveLength(1);
+    const callout = h.elements.find(
+      (element) => element.type === "callout",
+    ) as ReturnType<typeof newCalloutElement>;
+    expect(callout).toMatchObject({ x: 160, y: 100, width: 160, height: 100 });
+    Keyboard.exitTextEditor(await getTextEditor());
+  });
+
+  it("keeps the bottom of a short second-drag box at the release point", async () => {
+    Keyboard.keyPress(KEYS.C);
+    mouse.clickAt(100, 100);
+    mouse.downAt(240, 200);
+    mouse.moveTo(340, 212);
+    mouse.up();
+    const callout = h.elements[0] as ReturnType<typeof newCalloutElement>;
+    expect(callout.y + callout.height).toBe(212);
+    Keyboard.exitTextEditor(await getTextEditor());
+  });
+
+  it("keeps a large-font tap box above the tap after opening text editing", async () => {
+    API.setAppState({ currentItemFontSize: 120 });
+    Keyboard.keyPress(KEYS.C);
+    mouse.clickAt(100, 100);
+    mouse.clickAt(240, 200);
+    const callout = h.elements[0] as ReturnType<typeof newCalloutElement>;
+    expect(callout.x + callout.width / 2).toBe(240);
+    expect(callout.y + callout.height).toBe(200);
+    expect(callout.height).toBeGreaterThan(100);
     Keyboard.exitTextEditor(await getTextEditor());
   });
 

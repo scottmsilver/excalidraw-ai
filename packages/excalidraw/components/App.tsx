@@ -10817,6 +10817,10 @@ class App extends React.Component<AppProps, AppState> {
       creation.boxEnd,
       !!creation.dragged,
       roundness,
+      getApproxMinLineHeight(
+        this.state.currentItemFontSize,
+        getLineHeight(this.state.currentItemFontFamily),
+      ),
     );
     const topLayerFrame = this.getTopLayerFrameAtSceneCoords({
       x: placement.x,
