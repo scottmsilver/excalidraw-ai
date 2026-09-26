@@ -18,30 +18,33 @@ describe("tip-first callout placement", () => {
     { tip: [500, 100], join: [300, 200], edge: "right" },
     { tip: [100, 100], join: [200, 300], edge: "top" },
     { tip: [100, 500], join: [200, 300], edge: "bottom" },
-  ] as const)("places the box away from a $edge approach", ({ tip, join, edge }) => {
-    const placement = getCalloutPlacement(tip, join, join, false, null);
-    const [attachX, attachY] = attachment(placement);
-    expect(attachX).toBeCloseTo(join[0]);
-    expect(attachY).toBeCloseTo(join[1]);
-    expect([
-      placement.x + placement.tailTip[0],
-      placement.y + placement.tailTip[1],
-    ]).toEqual(tip);
-    expect([placement.width, placement.height]).toEqual([160, 100]);
-    if (edge === "left") {
-      expect(placement.x).toBe(join[0]);
-      expect(join[1] - placement.y).toBeCloseTo(placement.height / 3);
-    } else if (edge === "right") {
-      expect(placement.x + placement.width).toBe(join[0]);
-      expect(join[1] - placement.y).toBeCloseTo(placement.height / 3);
-    } else if (edge === "top") {
-      expect(placement.y).toBe(join[1]);
-      expect(join[0] - placement.x).toBeCloseTo(placement.width / 3);
-    } else {
-      expect(placement.y + placement.height).toBe(join[1]);
-      expect(join[0] - placement.x).toBeCloseTo(placement.width / 3);
-    }
-  });
+  ] as const)(
+    "places the box away from a $edge approach",
+    ({ tip, join, edge }) => {
+      const placement = getCalloutPlacement(tip, join, join, false, null);
+      const [attachX, attachY] = attachment(placement);
+      expect(attachX).toBeCloseTo(join[0]);
+      expect(attachY).toBeCloseTo(join[1]);
+      expect([
+        placement.x + placement.tailTip[0],
+        placement.y + placement.tailTip[1],
+      ]).toEqual(tip);
+      expect([placement.width, placement.height]).toEqual([160, 100]);
+      if (edge === "left") {
+        expect(placement.x).toBe(join[0]);
+        expect(join[1] - placement.y).toBeCloseTo(placement.height / 3);
+      } else if (edge === "right") {
+        expect(placement.x + placement.width).toBe(join[0]);
+        expect(join[1] - placement.y).toBeCloseTo(placement.height / 3);
+      } else if (edge === "top") {
+        expect(placement.y).toBe(join[1]);
+        expect(join[0] - placement.x).toBeCloseTo(placement.width / 3);
+      } else {
+        expect(placement.y + placement.height).toBe(join[1]);
+        expect(join[0] - placement.x).toBeCloseTo(placement.width / 3);
+      }
+    },
+  );
 
   it("joins at the middle of the facing edge for an axis-aligned arrow", () => {
     const placement = getCalloutPlacement(
@@ -51,7 +54,12 @@ describe("tip-first callout placement", () => {
       false,
       null,
     );
-    expect(placement).toMatchObject({ x: 300, y: 150, width: 160, height: 100 });
+    expect(placement).toMatchObject({
+      x: 300,
+      y: 150,
+      width: 160,
+      height: 100,
+    });
     expect(attachment(placement)[0]).toBeCloseTo(300);
     expect(attachment(placement)[1]).toBeCloseTo(200);
   });
@@ -64,7 +72,12 @@ describe("tip-first callout placement", () => {
       false,
       null,
     );
-    expect(placement).toMatchObject({ x: 220, y: 200, width: 160, height: 100 });
+    expect(placement).toMatchObject({
+      x: 220,
+      y: 200,
+      width: 160,
+      height: 100,
+    });
     expect(attachment(placement)[0]).toBeCloseTo(300);
     expect(attachment(placement)[1]).toBeCloseTo(200);
   });

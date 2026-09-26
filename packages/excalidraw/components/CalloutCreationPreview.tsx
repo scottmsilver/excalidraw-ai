@@ -131,7 +131,7 @@ export const CalloutCreationPreview = ({
       </svg>
       {creation.phase === "awaiting-box" && (
         <div className="callout-creation-hint">
-          Arrow set. Tap where the box bottom should be, or drag to size.
+          Arrow set. Press where the arrow joins the box; drag to size.
         </div>
       )}
     </div>

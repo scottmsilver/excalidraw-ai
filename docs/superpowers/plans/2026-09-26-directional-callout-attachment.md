@@ -15,6 +15,7 @@
 ### Task 1: Place the box from the fixed attachment
 
 **Files:**
+
 - Modify: `packages/element/src/calloutCreation.ts`
 - Test: `packages/element/tests/calloutCreation.test.ts`
 
@@ -26,6 +27,7 @@
 ### Task 2: Align editor feedback and end-to-end placement
 
 **Files:**
+
 - Modify: `packages/excalidraw/components/App.tsx`
 - Modify: `packages/excalidraw/components/CalloutCreationPreview.tsx`
 - Test: `packages/excalidraw/tests/callout.test.tsx`
@@ -38,6 +40,7 @@
 ### Task 3: Verify and integrate
 
 **Files:**
+
 - Review: changed code and docs
 
 - [ ] **Step 1: Run:** `yarn vitest run packages/element/tests/calloutCreation.test.ts packages/excalidraw/tests/callout.test.tsx` and `yarn test:typecheck`. Expect passing tests and no type errors.

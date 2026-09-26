@@ -23,9 +23,7 @@ export const getCalloutPlacement = (
     ? Math.max(1, Math.abs(boxEnd[0] - boxStart[0]))
     : DEFAULT_WIDTH;
   const height = Math.max(
-    dragged
-    ? Math.max(1, Math.abs(boxEnd[1] - boxStart[1]))
-    : DEFAULT_HEIGHT,
+    dragged ? Math.max(1, Math.abs(boxEnd[1] - boxStart[1])) : DEFAULT_HEIGHT,
     minimumHeight,
   );
   const dx = boxStart[0] - tip[0];
@@ -38,19 +36,11 @@ export const getCalloutPlacement = (
     attachX = dx > 0 ? 0 : width;
     attachY =
       height *
-      (dy === 0
-        ? 1 / 2
-        : dy > 0
-          ? nearCornerFraction
-          : 1 - nearCornerFraction);
+      (dy === 0 ? 1 / 2 : dy > 0 ? nearCornerFraction : 1 - nearCornerFraction);
   } else {
     attachX =
       width *
-      (dx === 0
-        ? 1 / 2
-        : dx > 0
-          ? nearCornerFraction
-          : 1 - nearCornerFraction);
+      (dx === 0 ? 1 / 2 : dx > 0 ? nearCornerFraction : 1 - nearCornerFraction);
     attachY = dy < 0 ? height : 0;
   }
   const x = boxStart[0] - attachX;

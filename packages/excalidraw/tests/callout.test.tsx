@@ -12,6 +12,7 @@ import { pointFrom, type LocalPoint } from "@excalidraw/math";
 import {
   getCalloutTailTipGlobalCoords,
   getCalloutTailPoints,
+  perimeterRatioToPoint,
 } from "@excalidraw/element/callout";
 import { redrawTextBoundingBox } from "@excalidraw/element/textElement";
 import { getTransformHandles } from "@excalidraw/element/transformHandles";
@@ -34,6 +35,18 @@ import type { PointerDownState } from "../types";
 const { h } = window;
 const mouse = new Pointer("mouse");
 
+const getCalloutAttachment = (
+  callout: ReturnType<typeof newCalloutElement>,
+) => {
+  const point = perimeterRatioToPoint(
+    callout.tailAttachment,
+    callout.width,
+    callout.height,
+    callout.roundness,
+  );
+  return [callout.x + point[0], callout.y + point[1]];
+};
+
 describe("restored callout tool", () => {
   beforeEach(async () => {
     unmountComponent();
@@ -52,7 +65,7 @@ describe("restored callout tool", () => {
     expect(getNonDeletedElements(h.elements)).toHaveLength(0);
     expect(
       screen.getByText(
-        "Arrow set. Tap where the box bottom should be, or drag to size.",
+        "Arrow set. Press where the arrow joins the box; drag to size.",
       ),
     ).toBeVisible();
     expect(screen.getByTestId("callout-creation-leader")).toBeVisible();
@@ -69,11 +82,14 @@ describe("restored callout tool", () => {
     mouse.up();
 
     const callout = h.elements[0] as ReturnType<typeof newCalloutElement>;
-    expect(callout).toMatchObject({ x: 240, y: 200, width: 160, height: 100 });
+    expect(callout).toMatchObject({ x: 400, width: 160, height: 100 });
+    expect(callout.y).toBeCloseTo(300 - 100 / 3);
+    expect(getCalloutAttachment(callout)[0]).toBeCloseTo(400);
+    expect(getCalloutAttachment(callout)[1]).toBeCloseTo(300);
     expect(getCalloutTailTipGlobalCoords(callout)).toEqual([100, 100]);
     expect(
       screen.queryByText(
-        "Arrow set. Tap where the box bottom should be, or drag to size.",
+        "Arrow set. Press where the arrow joins the box; drag to size.",
       ),
     ).toBeNull();
     Keyboard.exitTextEditor(await getTextEditor());
@@ -86,7 +102,7 @@ describe("restored callout tool", () => {
     Keyboard.keyPress(KEYS.ESCAPE);
     expect(
       screen.queryByText(
-        "Arrow set. Tap where the box bottom should be, or drag to size.",
+        "Arrow set. Press where the arrow joins the box; drag to size.",
       ),
     ).toBeNull();
     expect(h.elements).toHaveLength(0);
@@ -122,12 +138,15 @@ describe("restored callout tool", () => {
     expect(h.elements).toHaveLength(0);
   });
 
-  it("centers a default box above the second click", async () => {
+  it("places the default box away from the tip at the second click", async () => {
     Keyboard.keyPress(KEYS.C);
     mouse.clickAt(100, 100);
     mouse.clickAt(240, 200);
     const callout = h.elements[0] as ReturnType<typeof newCalloutElement>;
-    expect(callout).toMatchObject({ x: 160, y: 100, width: 160, height: 100 });
+    expect(callout).toMatchObject({ x: 240, width: 160, height: 100 });
+    expect(callout.y).toBeCloseTo(200 - 100 / 3);
+    expect(getCalloutAttachment(callout)[0]).toBeCloseTo(240);
+    expect(getCalloutAttachment(callout)[1]).toBeCloseTo(200);
     expect(getCalloutTailTipGlobalCoords(callout)).toEqual([100, 100]);
     Keyboard.exitTextEditor(await getTextEditor());
   });
@@ -140,6 +159,10 @@ describe("restored callout tool", () => {
       width: 100,
       height: 100,
     }).get();
+    const viewportBefore = {
+      scrollX: h.state.scrollX,
+      scrollY: h.state.scrollY,
+    };
     Keyboard.keyPress(KEYS.C);
     touch.clickAt(100, 100);
     expect(getNonDeletedElements(h.elements)).toHaveLength(1);
@@ -160,30 +183,81 @@ describe("restored callout tool", () => {
     const callout = h.elements.find(
       (element) => element.type === "callout",
     ) as ReturnType<typeof newCalloutElement>;
-    expect(callout).toMatchObject({ x: 160, y: 100, width: 160, height: 100 });
+    expect(callout).toMatchObject({ x: 240, width: 160, height: 100 });
+    expect(getCalloutAttachment(callout)[0]).toBeCloseTo(240);
+    expect(getCalloutAttachment(callout)[1]).toBeCloseTo(200);
+    expect({ scrollX: h.state.scrollX, scrollY: h.state.scrollY }).toEqual(
+      viewportBefore,
+    );
     Keyboard.exitTextEditor(await getTextEditor());
   });
 
-  it("keeps the bottom of a short second-drag box at the release point", async () => {
+  it("shows the final box and join in the drag preview", async () => {
+    Keyboard.keyPress(KEYS.C);
+    mouse.clickAt(100, 100);
+    mouse.downAt(300, 200);
+    mouse.moveTo(360, 240);
+    const preview = document.querySelector(".callout-creation-preview rect");
+    const leader = screen.getByTestId("callout-creation-leader");
+    expect(preview).toBeTruthy();
+    const previewX = Number(preview?.getAttribute("x"));
+    const previewY = Number(preview?.getAttribute("y"));
+    const previewWidth = Number(preview?.getAttribute("width"));
+    const previewHeight = Number(preview?.getAttribute("height"));
+    const previewJoin = [
+      Number(leader.getAttribute("x2")),
+      Number(leader.getAttribute("y2")),
+    ];
+
+    mouse.up();
+    const callout = h.elements[0] as ReturnType<typeof newCalloutElement>;
+    expect([previewX, previewY, previewWidth, previewHeight]).toEqual([
+      callout.x,
+      callout.y,
+      callout.width,
+      callout.height,
+    ]);
+    expect(previewJoin[0]).toBeCloseTo(getCalloutAttachment(callout)[0]);
+    expect(previewJoin[1]).toBeCloseTo(getCalloutAttachment(callout)[1]);
+    Keyboard.exitTextEditor(await getTextEditor());
+  });
+
+  it("keeps the join of a short second-drag box at the press point", async () => {
     Keyboard.keyPress(KEYS.C);
     mouse.clickAt(100, 100);
     mouse.downAt(240, 200);
     mouse.moveTo(340, 212);
     mouse.up();
     const callout = h.elements[0] as ReturnType<typeof newCalloutElement>;
-    expect(callout.y + callout.height).toBe(212);
+    expect(getCalloutAttachment(callout)[0]).toBeCloseTo(240);
+    expect(getCalloutAttachment(callout)[1]).toBeCloseTo(200);
     Keyboard.exitTextEditor(await getTextEditor());
   });
 
-  it("keeps a large-font tap box above the tap after opening text editing", async () => {
+  it("keeps a large-font tap box attached at the press after opening text editing", async () => {
     API.setAppState({ currentItemFontSize: 120 });
     Keyboard.keyPress(KEYS.C);
     mouse.clickAt(100, 100);
     mouse.clickAt(240, 200);
     const callout = h.elements[0] as ReturnType<typeof newCalloutElement>;
-    expect(callout.x + callout.width / 2).toBe(240);
-    expect(callout.y + callout.height).toBe(200);
+    expect(callout.x).toBe(240);
+    expect(getCalloutAttachment(callout)[0]).toBeCloseTo(240);
+    expect(getCalloutAttachment(callout)[1]).toBeCloseTo(200);
     expect(callout.height).toBeGreaterThan(100);
+    Keyboard.exitTextEditor(await getTextEditor());
+  });
+
+  it("uses the unsnapped second press as the join when the grid is on", async () => {
+    API.setAppState({ gridModeEnabled: true, gridSize: 20 });
+    Keyboard.keyPress(KEYS.C);
+    mouse.clickAt(103, 104);
+    mouse.clickAt(247, 213);
+
+    const callout = h.elements[0] as ReturnType<typeof newCalloutElement>;
+    expect(getCalloutTailTipGlobalCoords(callout)).toEqual([100, 100]);
+    const [joinX, joinY] = getCalloutAttachment(callout);
+    expect(joinX).toBeCloseTo(247);
+    expect(joinY).toBeCloseTo(213);
     Keyboard.exitTextEditor(await getTextEditor());
   });
 
@@ -254,10 +328,10 @@ describe("restored callout tool", () => {
     expect(restored[0]).toMatchObject({
       type: "callout",
       x: 260,
-      y: 180,
       width: 160,
       height: 80,
     });
+    expect(restored[0].y).toBeCloseTo(180 - 80 / 3);
     expect(restored[0]).toMatchObject({
       tailTip: expect.any(Object),
       tailAttachment: expect.any(Number),
