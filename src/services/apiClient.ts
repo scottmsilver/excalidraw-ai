@@ -451,7 +451,7 @@ export async function generateImage(
 
       try {
         const errorData = await response.json();
-        errorMessage = errorData.error || errorMessage;
+        errorMessage = errorData.error || errorData.detail || errorMessage;
         details = errorData.details;
       } catch {
         // Use default error message

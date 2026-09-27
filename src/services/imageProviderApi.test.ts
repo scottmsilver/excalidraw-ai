@@ -43,3 +43,19 @@ it("sends the provider with direct and inpaint edits", async () => {
     JSON.parse(fetchMock.mock.calls[1][1]?.body as string).imageProvider,
   ).toBe("openai");
 });
+
+it("preserves a FastAPI missing-key detail from a direct edit", async () => {
+  setImageProviderPreference("openai");
+  const message =
+    "OpenAI image editing is unavailable: OPENAI_API_KEY is not configured on the server";
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(JSON.stringify({ detail: message }), { status: 503 }),
+  );
+
+  await expect(
+    generateImage("source", "blue", { model: "gemini" }),
+  ).rejects.toMatchObject({
+    message,
+    statusCode: 503,
+  });
+});
