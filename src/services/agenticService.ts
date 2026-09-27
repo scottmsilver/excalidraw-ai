@@ -29,6 +29,7 @@ import {
   type AIProgressEvent,
   type ShapeMetadata,
 } from "./apiClient";
+import { getImageProviderPreference } from "./imageProviderPreference";
 
 import type { ReferencePoint } from "../components/ReferencePoints";
 
@@ -157,6 +158,7 @@ export function blobToBase64(blob: Blob): Promise<string> {
 export async function executeAgenticEdit(
   params: AgenticEditParams,
 ): Promise<AgenticEditResult> {
+  const imageProvider = getImageProviderPreference();
   const {
     cleanImageBlob,
     annotatedImageBlob,
@@ -193,6 +195,7 @@ export async function executeAgenticEdit(
     referencePoints: apiReferencePoints,
     shapes,
     maxIterations,
+    imageProvider,
     onProgress,
   });
 

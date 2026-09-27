@@ -15,6 +15,7 @@ import { LanguageList } from "../app-language/LanguageList";
 import { isExcalidrawPlusSignedUser } from "../app_constants";
 
 import { saveDebugState } from "./DebugCanvas";
+import { AIImageProviderPreference } from "./AIImageProviderPreference";
 
 export const AppMainMenu: React.FC<{
   onCollabDialogOpen: () => any;
@@ -78,7 +79,9 @@ export const AppMainMenu: React.FC<{
         </MainMenu.Item>
       )}
       <MainMenu.Separator />
-      <MainMenu.DefaultItems.Preferences />
+      <MainMenu.DefaultItems.Preferences
+        additionalItems={<AIImageProviderPreference />}
+      />
       <MainMenu.DefaultItems.ToggleTheme allowSystemTheme theme={props.theme} />
       <MainMenu.ItemCustom>
         <LanguageList style={{ width: "100%" }} />

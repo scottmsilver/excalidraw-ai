@@ -9,6 +9,8 @@ import {
 import { vi } from "vitest";
 
 import { executeAgenticEdit } from "../../services/agenticService";
+import { setImageProviderPreference } from "../../services/imageProviderPreference";
+import { aiLogService } from "../../../excalidraw-app/ai/aiLogService";
 
 import {
   AIManipulationProvider,
@@ -42,6 +44,35 @@ function Harness() {
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();
+  localStorage.clear();
+  aiLogService.clearLog();
+});
+
+it("shows a missing OpenAI key error through the AI log path", async () => {
+  setImageProviderPreference("openai");
+  vi.mocked(executeAgenticEdit).mockRejectedValue(
+    new Error("OPENAI_API_KEY is not configured"),
+  );
+  render(
+    <AIManipulationProvider>
+      <Harness />
+    </AIManipulationProvider>,
+  );
+  fireEvent.change(screen.getByRole("textbox"), {
+    target: { value: "Make it blue" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(aiLogService.getLog()).toContainEqual(
+    expect.objectContaining({
+      step: "error",
+      error: expect.objectContaining({
+        message: "OPENAI_API_KEY is not configured",
+      }),
+    }),
+  );
 });
 
 it.each(["accept", "reject", "reset"])(

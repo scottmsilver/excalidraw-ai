@@ -5,6 +5,8 @@
  * to ensure type-safe API communication.
  */
 
+import type { ImageProvider } from "./imageProviderPreference";
+
 // =============================================================================
 // Progress Step Enum (matches Python AIProgressStep)
 // =============================================================================
@@ -172,6 +174,7 @@ export interface AIProgressEvent {
  * This is the primary endpoint for AI-powered image editing.
  */
 export interface AgenticEditRequest {
+  imageProvider?: ImageProvider;
   /** Clean source image as base64 data URL (no annotations) */
   sourceImage: string;
   /** Image with user annotations visible as base64 data URL (for AI to see what user marked) */
@@ -209,6 +212,7 @@ export interface AgenticEditResponse {
  * Request body for POST /api/images/generate endpoint.
  */
 export interface GenerateImageRequest {
+  imageProvider?: ImageProvider;
   /** The model to use (e.g., "gemini-3-pro-image-preview") */
   model: string;
   /** Source image as base64 data URL */
@@ -241,6 +245,7 @@ export interface GenerateImageResponse {
  * Request body for POST /api/images/inpaint endpoint.
  */
 export interface InpaintRequest {
+  imageProvider?: ImageProvider;
   /** Source image as base64 data URL */
   sourceImage: string;
   /** Mask image as base64 data URL (white = edit area) */
@@ -290,6 +295,7 @@ export type OnProgressCallback = (event: AIProgressEvent) => void;
  * Options for agenticEdit function.
  */
 export interface AgenticEditOptions {
+  imageProvider?: ImageProvider;
   /** Image with user annotations visible (for AI to see what user marked) */
   annotatedImage?: string;
   /** Optional mask for inpainting */
@@ -308,6 +314,7 @@ export interface AgenticEditOptions {
  * Options for generateImage function.
  */
 export interface GenerateImageOptions {
+  imageProvider?: ImageProvider;
   /** The model to use */
   model: string;
   /** Optional mask image */
@@ -320,6 +327,7 @@ export interface GenerateImageOptions {
  * Options for inpaint function.
  */
 export interface InpaintOptions {
+  imageProvider?: ImageProvider;
   /** Thinking budget for planning */
   thinkingBudget?: number;
   /** Callback for SSE progress events */

@@ -19,6 +19,13 @@ import {
   useCoordinateHighlight,
 } from "../ai/CoordinateHighlightContext";
 import { CoordinateHighlightOverlay } from "../ai/CoordinateHighlightOverlay";
+import { AILogPanel } from "../ai/AILogPanel";
+import { aiLogService } from "../ai/aiLogService";
+import { AppMainMenu } from "../components/AppMainMenu";
+import {
+  getImageProviderPreference,
+  setImageProviderPreference,
+} from "../../src/services/imageProviderPreference";
 
 const MarkerTunnel = () => {
   const { AIToolbarTunnel } = useTunnels();
@@ -65,9 +72,70 @@ const HighlightEditor = () => {
 afterEach(() => {
   unmountComponent();
   restoreOriginalGetBoundingClientRect();
+  localStorage.clear();
+  aiLogService.clearLog();
 });
 
 describe("AI integration with the upstream editor", () => {
+  it("selects and persists OpenAI in the Preferences submenu", async () => {
+    mockBoundingClientRect({ width: 1440, height: 900 });
+    await render(
+      <Excalidraw>
+        <AppMainMenu
+          onCollabDialogOpen={() => {}}
+          isCollaborating={false}
+          isCollabEnabled={false}
+          theme="light"
+          refresh={() => {}}
+        />
+      </Excalidraw>,
+    );
+    fireEvent.click(screen.getByTestId("main-menu-trigger"));
+    fireEvent.click(screen.getByText("Preferences"));
+    const gemini = screen.getByRole("radio", { name: "Gemini" });
+    const openai = screen.getByRole("radio", { name: "OpenAI (Sunburst)" });
+    expect(gemini).toBeChecked();
+    fireEvent.click(openai);
+    expect(getImageProviderPreference()).toBe("openai");
+    expect(openai).toBeChecked();
+    unmountComponent();
+    await render(
+      <Excalidraw>
+        <AppMainMenu
+          onCollabDialogOpen={() => {}}
+          isCollaborating={false}
+          isCollabEnabled={false}
+          theme="light"
+          refresh={() => {}}
+        />
+      </Excalidraw>,
+    );
+    fireEvent.click(screen.getByTestId("main-menu-trigger"));
+    fireEvent.click(screen.getByText("Preferences"));
+    expect(
+      screen.getByRole("radio", { name: "OpenAI (Sunburst)" }),
+    ).toBeChecked();
+  });
+
+  it("shows the missing OpenAI key message in the existing AI log UI", async () => {
+    setImageProviderPreference("openai");
+    mockBoundingClientRect({ width: 1440, height: 900 });
+    await render(
+      <Excalidraw>
+        <AILogPanel />
+      </Excalidraw>,
+    );
+    act(() => {
+      aiLogService.startOperation("planning", "AI edit");
+      aiLogService.endOperation("error", "OPENAI_API_KEY is not configured", {
+        message: "OPENAI_API_KEY is not configured",
+      });
+    });
+    expect(
+      await screen.findAllByText("OPENAI_API_KEY is not configured"),
+    ).not.toHaveLength(0);
+  });
+
   it.each([
     { formFactor: "desktop", width: 1440, height: 900 },
     { formFactor: "phone", width: 390, height: 844 },

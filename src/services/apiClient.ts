@@ -14,6 +14,8 @@
 
 /// <reference types="vite/client" />
 
+import { getImageProviderPreference } from "./imageProviderPreference";
+
 import type {
   AgenticEditResponse,
   AgenticEditOptions,
@@ -338,6 +340,7 @@ export async function agenticEdit(
     referencePoints,
     shapes,
     maxIterations,
+    imageProvider = getImageProviderPreference(),
     onProgress,
   } = options;
 
@@ -350,6 +353,7 @@ export async function agenticEdit(
     referencePoints,
     shapes,
     maxIterations: maxIterations ?? 3,
+    imageProvider,
   };
 
   debugLog("Agentic edit request", {
@@ -408,7 +412,12 @@ export async function generateImage(
   prompt: string,
   options: GenerateImageOptions,
 ): Promise<GenerateImageResponse> {
-  const { model, maskImage, logLabel } = options;
+  const {
+    model,
+    maskImage,
+    logLabel,
+    imageProvider = getImageProviderPreference(),
+  } = options;
 
   const requestBody = {
     model,
@@ -417,6 +426,7 @@ export async function generateImage(
     maskImage,
     isImageGeneration: true,
     logLabel,
+    imageProvider,
   };
 
   debugLog("Generate image request", {
@@ -510,13 +520,18 @@ export async function inpaint(
   prompt: string,
   options: InpaintOptions = {},
 ): Promise<InpaintResponse> {
-  const { thinkingBudget, onProgress } = options;
+  const {
+    thinkingBudget,
+    onProgress,
+    imageProvider = getImageProviderPreference(),
+  } = options;
 
   const requestBody = {
     sourceImage,
     maskImage,
     prompt,
     thinkingBudget,
+    imageProvider,
   };
 
   debugLog("Inpaint request", {
